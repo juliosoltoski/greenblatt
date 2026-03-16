@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "greenblatt-magic"
+version = "0.1.0"
+description = "Automated Greenblatt Magic Formula screener and simulation engine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pandas>=2.2",
+  "yfinance>=0.2.54",
+  "yahoo-fin>=0.8.9.1",
+  "curl-cffi>=0.7.4",
+  "lxml_html_clean>=0.4.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+]
+
+[project.scripts]
+greenblatt = "greenblatt.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/greenblatt"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/greenblatt/data" = "greenblatt/data"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

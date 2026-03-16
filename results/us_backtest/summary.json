@@ -1,0 +1,11 @@
+{
+  "start_date": "2024-01-01",
+  "end_date": "2025-12-31",
+  "total_return": 0.2293913019490148,
+  "annualized_return": 0.10877919440662964,
+  "max_drawdown": -0.14882466982444986,
+  "ending_equity": 122939.13019490147,
+  "ending_positions": 20,
+  "benchmark_return": 0.44333654953673896,
+  "alpha_vs_benchmark": -0.21394524758772415
+}

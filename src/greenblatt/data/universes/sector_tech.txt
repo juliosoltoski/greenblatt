@@ -1,0 +1,21 @@
+# Global technology starter list
+AAPL
+MSFT
+GOOGL
+META
+NVDA
+ADBE
+CRM
+ORCL
+INTC
+TSM
+ASML
+AMD
+NOW
+SHOP
+SAP
+ERIC-B.ST
+INFY.NS
+TCS.NS
+0700.HK
+SONY
