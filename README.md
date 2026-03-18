@@ -8,6 +8,9 @@ Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy
 - [product_plan.md](/home/jsoltoski/greenblatt/product_plan.md): product shape, architecture, and system design reference
 - [implementation_plan.md](/home/jsoltoski/greenblatt/implementation_plan.md): the original M0-M10 execution roadmap, now completed
 - [nice_to_have_implementation_plan.md](/home/jsoltoski/greenblatt/nice_to_have_implementation_plan.md): active post-M10 roadmap for product polish, UX, and deferred enhancements
+- [contributor_guide.md](/home/jsoltoski/greenblatt/contributor_guide.md): where to change what across the shared core, backend, frontend, and infra
+- [manual_smoke_test_guide.md](/home/jsoltoski/greenblatt/manual_smoke_test_guide.md): consolidated manual verification paths for local and staging-oriented checks
+- [release_notes.md](/home/jsoltoski/greenblatt/release_notes.md): release-note convention and the latest shipped notes
 
 ## Status Snapshot
 
@@ -90,42 +93,8 @@ ALPHA_VANTAGE_API_KEY=your-key-here
 Provider status is available to authenticated users at `GET /api/v1/providers/`.
 Add `?probe=true` to run live upstream checks instead of config-only checks.
 
-To smoke-test the async job pipeline after logging in:
-
-1. Open `http://localhost:8080/app/jobs`.
-2. Launch the default smoke job.
-3. Watch the run move from `queued` to `running` to `succeeded`, or choose a failure mode to inspect retries and error capture.
-
-To smoke-test the first real screening workflow:
-
-1. Create or open a saved universe at `http://localhost:8080/app/universes`.
-2. Open `http://localhost:8080/app/screens`.
-3. Launch a screen from the saved universe.
-4. Open the resulting screen detail page and verify the ranked rows, exclusions, and CSV export link.
-
-To smoke-test the backtesting workflow:
-
-1. Create or open a saved universe at `http://localhost:8080/app/universes`.
-2. Open `http://localhost:8080/app/backtests`.
-3. Launch a backtest with a small saved universe and a short date range.
-4. Open the resulting backtest detail page and verify the equity curve, trade ledger, final holdings, review targets, and export download link.
-
-To smoke-test M7 templates and history:
-
-1. Launch at least one screen or backtest so the workspace has persisted runs.
-2. Open `http://localhost:8080/app/history`.
-3. Save one prior run as a template, then open `http://localhost:8080/app/templates`.
-4. Use the template as a draft or launch it directly and verify a new run is created.
-5. Select two runs of the same type in history and open the compare view.
-
-To smoke-test M8 schedules and alerts:
-
-1. Make sure your Django user has an email or set an explicit destination email in the forms.
-2. Open `http://localhost:8080/app/templates` and confirm you have at least one saved template.
-3. Open `http://localhost:8080/app/schedules` and create a recurring schedule from that template.
-4. Use the schedule's `Run now` action to launch it immediately and confirm a new screen or backtest run is created.
-5. Open `http://localhost:8080/app/alerts`, create either a `run failed`, `screen completed`, `backtest completed`, or `ticker entered top N` rule, then launch a matching run.
-6. Verify the resulting notification event appears in the alerts page and, with real SMTP configured, is delivered by email.
+Manual verification is now consolidated in [manual_smoke_test_guide.md](/home/jsoltoski/greenblatt/manual_smoke_test_guide.md).
+Use that file for the end-to-end paths covering auth, universes, screens, backtests, templates, history, jobs, schedules, alerts, providers, and staging-oriented checks.
 
 To clean up orphaned filesystem artifacts that are no longer referenced by uploads or run exports:
 

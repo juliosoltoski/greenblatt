@@ -68,46 +68,27 @@ export function AppShell() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>Authenticated Session</p>
+            <p style={eyebrowStyle}>Dashboard</p>
             <h1 style={titleStyle}>Welcome back, {user.display_name}</h1>
+            <p style={bodyStyle}>
+              Your workspace is ready. A good default flow is: refresh or create a universe, run a
+              screen, then backtest the shortlist only when the ranking looks sensible.
+            </p>
           </div>
           <button type="button" style={secondaryButtonStyle} onClick={handleLogout}>
             Log out
           </button>
         </div>
 
-        <p style={bodyStyle}>
-          Your protected shell is active. Universes, jobs, screens, backtests, templates, and run
-          history now work together, so saved research inputs can be repeated and compared instead
-          of rebuilt by hand.
-        </p>
-
         {error ? <p style={errorStyle}>{error}</p> : null}
 
         <div style={gridStyle}>
           <div style={cardStyle}>
-            <p style={cardLabelStyle}>Active workspace</p>
-            <h2 style={cardTitleStyle}>{user.active_workspace?.name ?? "No workspace"}</h2>
-            <p style={metaStyle}>
-              Role: <strong>{user.active_workspace?.role ?? "n/a"}</strong>
-            </p>
-            <p style={metaStyle}>
-              Slug: <code>{user.active_workspace?.slug ?? "n/a"}</code>
-            </p>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={cardLabelStyle}>Account</p>
-            <h2 style={cardTitleStyle}>{user.username}</h2>
-            <p style={metaStyle}>{user.email || "No email configured"}</p>
-            <p style={metaStyle}>Staff access: {user.is_staff ? "yes" : "no"}</p>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={cardLabelStyle}>Research setup</p>
+            <p style={cardLabelStyle}>Start Here</p>
             <h2 style={cardTitleStyle}>Universes</h2>
             <p style={metaStyle}>
-              Save manual lists, built-in profiles, or uploaded ticker files before launching work.
+              Save a profile, a custom ticker list, or an uploaded file before launching anything
+              else.
             </p>
             <Link href="/app/universes" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
               Open universe manager
@@ -115,10 +96,11 @@ export function AppShell() {
           </div>
 
           <div style={cardStyle}>
-            <p style={cardLabelStyle}>Research workflow</p>
+            <p style={cardLabelStyle}>Research</p>
             <h2 style={cardTitleStyle}>Screens</h2>
             <p style={metaStyle}>
-              Launch Magic Formula ranking runs from saved universes and review persisted results.
+              Launch the current Magic Formula ranking from a saved universe and review the ranked
+              output.
             </p>
             <Link href="/app/screens" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
               Open screens
@@ -126,10 +108,10 @@ export function AppShell() {
           </div>
 
           <div style={cardStyle}>
-            <p style={cardLabelStyle}>Portfolio workflow</p>
+            <p style={cardLabelStyle}>Portfolio</p>
             <h2 style={cardTitleStyle}>Backtests</h2>
             <p style={metaStyle}>
-              Run persisted historical simulations and inspect curves, trades, and final holdings.
+              Test the shortlisted ideas over time and inspect curves, trades, and final holdings.
             </p>
             <Link href="/app/backtests" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
               Open backtests
@@ -137,58 +119,54 @@ export function AppShell() {
           </div>
 
           <div style={cardStyle}>
-            <p style={cardLabelStyle}>Async pipeline</p>
-            <h2 style={cardTitleStyle}>Jobs</h2>
+            <p style={cardLabelStyle}>Research Library</p>
+            <h2 style={cardTitleStyle}>Templates and History</h2>
             <p style={metaStyle}>
-              Inspect the shared job queue, including smoke tests, screens, and backtests.
+              Reopen prior runs, compare them, and promote good configurations into reusable
+              templates.
             </p>
-            <Link href="/app/jobs" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
-              Open jobs
-            </Link>
+            <div style={cardActionRowStyle}>
+              <Link href="/app/templates" style={linkButtonStyle}>
+                Templates
+              </Link>
+              <Link href="/app/history" style={ghostLinkStyle}>
+                History
+              </Link>
+            </div>
           </div>
 
           <div style={cardStyle}>
-            <p style={cardLabelStyle}>Reusable workflows</p>
-            <h2 style={cardTitleStyle}>Templates</h2>
+            <p style={cardLabelStyle}>Automation</p>
+            <h2 style={cardTitleStyle}>Schedules, Alerts, and Jobs</h2>
             <p style={metaStyle}>
-              Save prior runs as reusable templates, then relaunch or reopen them as drafts.
+              Monitor the queue, schedule repeat runs, and route completion or failure alerts.
             </p>
-            <Link href="/app/templates" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
-              Open templates
-            </Link>
+            <div style={cardActionRowStyle}>
+              <Link href="/app/schedules" style={linkButtonStyle}>
+                Schedules
+              </Link>
+              <Link href="/app/alerts" style={ghostLinkStyle}>
+                Alerts
+              </Link>
+              <Link href="/app/jobs" style={ghostLinkStyle}>
+                Jobs
+              </Link>
+            </div>
           </div>
 
           <div style={cardStyle}>
-            <p style={cardLabelStyle}>Research archive</p>
-            <h2 style={cardTitleStyle}>History</h2>
+            <p style={cardLabelStyle}>Workspace</p>
+            <h2 style={cardTitleStyle}>{user.active_workspace?.name ?? "No workspace"}</h2>
             <p style={metaStyle}>
-              Browse prior screen and backtest runs, compare two runs, and save useful ones as templates.
+              Role: <strong>{user.active_workspace?.role ?? "n/a"}</strong>
             </p>
-            <Link href="/app/history" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
-              Open history
-            </Link>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={cardLabelStyle}>Recurring automation</p>
-            <h2 style={cardTitleStyle}>Schedules</h2>
             <p style={metaStyle}>
-              Launch saved templates on a recurring beat-backed cadence and trigger them manually when needed.
+              Slug: <code>{user.active_workspace?.slug ?? "n/a"}</code>
             </p>
-            <Link href="/app/schedules" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
-              Open schedules
-            </Link>
-          </div>
-
-          <div style={cardStyle}>
-            <p style={cardLabelStyle}>Proactive monitoring</p>
-            <h2 style={cardTitleStyle}>Alerts</h2>
             <p style={metaStyle}>
-              Create email alerts for workflow completion, failures, and top-N ticker appearances.
+              Account: <strong>{user.username}</strong> {user.email ? `· ${user.email}` : ""}
             </p>
-            <Link href="/app/alerts" style={{ ...linkButtonStyle, marginTop: "0.9rem" }}>
-              Open alerts
-            </Link>
+            <p style={metaStyle}>Staff access: {user.is_staff ? "yes" : "no"}</p>
           </div>
         </div>
 
@@ -223,14 +201,11 @@ export function AppShell() {
 }
 
 const shellStyle: CSSProperties = {
-  minHeight: "100vh",
-  display: "grid",
-  placeItems: "center",
-  padding: "2rem",
+  padding: 0,
 };
 
 const panelStyle: CSSProperties = {
-  width: "min(980px, 100%)",
+  width: "100%",
   borderRadius: "24px",
   padding: "2rem",
   background: "rgba(255, 255, 255, 0.9)",
@@ -277,6 +252,13 @@ const cardStyle: CSSProperties = {
   borderRadius: "18px",
   background: "#f7fafc",
   border: "1px solid rgba(73, 98, 128, 0.18)",
+};
+
+const cardActionRowStyle: CSSProperties = {
+  display: "flex",
+  gap: "0.65rem",
+  flexWrap: "wrap",
+  marginTop: "0.9rem",
 };
 
 const cardLabelStyle: CSSProperties = {

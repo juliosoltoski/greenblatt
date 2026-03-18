@@ -18,6 +18,29 @@ import {
 } from "@/lib/api";
 
 type LoadState = "loading" | "ready" | "error";
+type UniverseCreationMode = "profile" | "manual" | "upload";
+
+const creationModeOptions: Array<{
+  key: UniverseCreationMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: "profile",
+    label: "Built-in profile",
+    description: "Fastest way to get started",
+  },
+  {
+    key: "manual",
+    label: "Manual list",
+    description: "Paste a custom watchlist",
+  },
+  {
+    key: "upload",
+    label: "Upload file",
+    description: "Import a newline-delimited ticker file",
+  },
+];
 
 export function UniverseHub() {
   const router = useRouter();
@@ -36,6 +59,7 @@ export function UniverseHub() {
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<"manual" | "profile" | "upload" | null>(null);
+  const [creationMode, setCreationMode] = useState<UniverseCreationMode>("profile");
 
   useEffect(() => {
     let active = true;
@@ -204,23 +228,16 @@ export function UniverseHub() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M3 Universe Management</p>
-            <h1 style={titleStyle}>Build research universes before you run jobs</h1>
-          </div>
-          <div style={actionRowStyle}>
-            <Link href="/app" style={ghostLinkStyle}>
-              App shell
-            </Link>
-            <a href="http://localhost:8000/admin/" style={ghostLinkStyle}>
-              Django admin
-            </a>
+            <p style={eyebrowStyle}>Research Inputs</p>
+            <h1 style={titleStyle}>Create a universe without leaving the app</h1>
           </div>
         </div>
 
         <p style={bodyStyle}>
           Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Save a
-          built-in profile, paste a manual list, or upload a newline-delimited text file and preview
-          the resolved tickers before any screening or backtesting work starts.
+          built-in profile for the quickest start, or switch to manual and upload modes when you
+          need a custom list. The saved universe becomes reusable across screens, backtests,
+          templates, and schedules.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -228,159 +245,227 @@ export function UniverseHub() {
         <div style={layoutStyle}>
           <section style={stackStyle}>
             <div style={sectionCardStyle}>
-              <p style={sectionLabelStyle}>Built-in profiles</p>
-              <form onSubmit={handleProfileSubmit} style={formStyle}>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Saved universe name</span>
-                  <input
-                    type="text"
-                    value={profileName}
-                    onChange={(event) => setProfileName(event.target.value)}
-                    placeholder="Technology profile"
-                    style={inputStyle}
-                    required
-                  />
-                </label>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Description</span>
-                  <input
-                    type="text"
-                    value={profileDescription}
-                    onChange={(event) => setProfileDescription(event.target.value)}
-                    placeholder="Saved from the built-in profile catalog"
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Profile</span>
-                  <select
-                    value={selectedProfileKey}
-                    onChange={(event) => setSelectedProfileKey(event.target.value)}
-                    style={inputStyle}
-                  >
-                    {profiles.map((profile) => (
-                      <option key={profile.key} value={profile.key}>
-                        {profile.key}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="submit" style={buttonStyle} disabled={isSubmitting === "profile"}>
-                  {isSubmitting === "profile" ? "Saving profile..." : "Save built-in universe"}
-                </button>
-              </form>
-              <div style={profileGridStyle}>
-                {profiles.map((profile) => (
-                  <article
-                    key={profile.key}
-                    style={{
-                      ...profileCardStyle,
-                      borderColor:
-                        selectedProfileKey === profile.key ? "rgba(22, 33, 50, 0.38)" : "rgba(73, 98, 128, 0.18)",
-                    }}
-                  >
-                    <div style={profileHeaderStyle}>
-                      <strong>{profile.key}</strong>
-                      {profile.estimated_entry_count ? (
-                        <span style={pillStyle}>{profile.estimated_entry_count.toLocaleString()} names</span>
-                      ) : null}
-                    </div>
-                    <p style={metaStyle}>{profile.description}</p>
-                    <p style={subtleMetaStyle}>Source: {profile.source}</p>
-                    {profile.preview_tickers.length > 0 ? (
-                      <div style={tickerWrapStyle}>
-                        {profile.preview_tickers.map((ticker) => (
-                          <span key={ticker} style={tickerChipStyle}>
-                            {ticker}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p style={subtleMetaStyle}>{profile.resolution_note}</p>
-                    )}
-                  </article>
-                ))}
+              <div style={modeHeaderStyle}>
+                <div>
+                  <p style={sectionLabelStyle}>Create a universe</p>
+                  <h2 style={sectionTitleStyle}>Choose the starting point that fits the job</h2>
+                  <p style={subtleMetaStyle}>
+                    Most first-time users should start with a built-in profile, then only switch to
+                    a custom source when they already know the target ticker set.
+                  </p>
+                </div>
+                <div style={modeSwitchStyle}>
+                  {creationModeOptions.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      style={creationMode === option.key ? activeModeButtonStyle : modeButtonStyle}
+                      onClick={() => setCreationMode(option.key)}
+                    >
+                      <span>{option.label}</span>
+                      <small style={modeDescriptionStyle}>{option.description}</small>
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {creationMode === "profile" ? (
+                <div style={modeSectionStyle}>
+                  <form onSubmit={handleProfileSubmit} style={formStyle}>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Saved universe name</span>
+                      <input
+                        type="text"
+                        value={profileName}
+                        onChange={(event) => setProfileName(event.target.value)}
+                        placeholder="Technology profile"
+                        style={inputStyle}
+                        required
+                      />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Description</span>
+                      <input
+                        type="text"
+                        value={profileDescription}
+                        onChange={(event) => setProfileDescription(event.target.value)}
+                        placeholder="Saved from the built-in profile catalog"
+                        style={inputStyle}
+                      />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Profile</span>
+                      <select
+                        value={selectedProfileKey}
+                        onChange={(event) => setSelectedProfileKey(event.target.value)}
+                        style={inputStyle}
+                      >
+                        {profiles.map((profile) => (
+                          <option key={profile.key} value={profile.key}>
+                            {profile.key}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="submit" style={buttonStyle} disabled={isSubmitting === "profile"}>
+                      {isSubmitting === "profile" ? "Saving profile..." : "Save built-in universe"}
+                    </button>
+                  </form>
+
+                  <div style={profileGridStyle}>
+                    {profiles.map((profile) => (
+                      <article
+                        key={profile.key}
+                        style={{
+                          ...profileCardStyle,
+                          borderColor:
+                            selectedProfileKey === profile.key ? "rgba(22, 33, 50, 0.38)" : "rgba(73, 98, 128, 0.18)",
+                        }}
+                      >
+                        <div style={profileHeaderStyle}>
+                          <strong>{profile.key}</strong>
+                          {profile.estimated_entry_count ? (
+                            <span style={pillStyle}>{profile.estimated_entry_count.toLocaleString()} names</span>
+                          ) : null}
+                        </div>
+                        <p style={metaStyle}>{profile.description}</p>
+                        <p style={subtleMetaStyle}>Source: {profile.source}</p>
+                        {profile.preview_tickers.length > 0 ? (
+                          <div style={tickerWrapStyle}>
+                            {profile.preview_tickers.map((ticker) => (
+                              <span key={ticker} style={tickerChipStyle}>
+                                {ticker}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={subtleMetaStyle}>{profile.resolution_note}</p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {creationMode === "manual" ? (
+                <div style={modeSectionStyle}>
+                  <div style={helperCardStyle}>
+                    <strong>Best for focused watchlists</strong>
+                    <p style={helperTextStyle}>
+                      Paste one ticker per line when you already know the exact names you want to
+                      research.
+                    </p>
+                  </div>
+                  <form onSubmit={handleManualSubmit} style={formStyle}>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Universe name</span>
+                      <input
+                        type="text"
+                        value={manualName}
+                        onChange={(event) => setManualName(event.target.value)}
+                        placeholder="High conviction ideas"
+                        style={inputStyle}
+                        required
+                      />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Description</span>
+                      <input
+                        type="text"
+                        value={manualDescription}
+                        onChange={(event) => setManualDescription(event.target.value)}
+                        placeholder="Manually curated tickers"
+                        style={inputStyle}
+                      />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Tickers</span>
+                      <textarea
+                        value={manualTickers}
+                        onChange={(event) => setManualTickers(event.target.value)}
+                        rows={7}
+                        style={textareaStyle}
+                        required
+                      />
+                    </label>
+                    <button type="submit" style={buttonStyle} disabled={isSubmitting === "manual"}>
+                      {isSubmitting === "manual" ? "Creating universe..." : "Create manual universe"}
+                    </button>
+                  </form>
+                </div>
+              ) : null}
+
+              {creationMode === "upload" ? (
+                <div style={modeSectionStyle}>
+                  <div style={helperCardStyle}>
+                    <strong>Best for imports</strong>
+                    <p style={helperTextStyle}>
+                      Use a newline-delimited text file when the source list already exists outside
+                      the app.
+                    </p>
+                  </div>
+                  <form onSubmit={handleUploadSubmit} style={formStyle}>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Universe name</span>
+                      <input
+                        type="text"
+                        value={uploadName}
+                        onChange={(event) => setUploadName(event.target.value)}
+                        placeholder="Imported watchlist"
+                        style={inputStyle}
+                        required
+                      />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Description</span>
+                      <input
+                        type="text"
+                        value={uploadDescription}
+                        onChange={(event) => setUploadDescription(event.target.value)}
+                        placeholder="Uploaded from a newline-delimited text file"
+                        style={inputStyle}
+                      />
+                    </label>
+                    <label style={fieldStyle}>
+                      <span style={labelStyle}>Ticker file</span>
+                      <input
+                        type="file"
+                        accept=".txt,.csv,.lst,text/plain"
+                        onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                        style={fileInputStyle}
+                        required
+                      />
+                    </label>
+                    <button type="submit" style={buttonStyle} disabled={isSubmitting === "upload"}>
+                      {isSubmitting === "upload" ? "Uploading..." : "Create uploaded universe"}
+                    </button>
+                  </form>
+                </div>
+              ) : null}
             </div>
 
             <div style={sectionCardStyle}>
-              <p style={sectionLabelStyle}>Manual ticker list</p>
-              <form onSubmit={handleManualSubmit} style={formStyle}>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Universe name</span>
-                  <input
-                    type="text"
-                    value={manualName}
-                    onChange={(event) => setManualName(event.target.value)}
-                    placeholder="High conviction ideas"
-                    style={inputStyle}
-                    required
-                  />
-                </label>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Description</span>
-                  <input
-                    type="text"
-                    value={manualDescription}
-                    onChange={(event) => setManualDescription(event.target.value)}
-                    placeholder="Manually curated tickers"
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Tickers</span>
-                  <textarea
-                    value={manualTickers}
-                    onChange={(event) => setManualTickers(event.target.value)}
-                    rows={7}
-                    style={textareaStyle}
-                    required
-                  />
-                </label>
-                <button type="submit" style={buttonStyle} disabled={isSubmitting === "manual"}>
-                  {isSubmitting === "manual" ? "Creating universe..." : "Create manual universe"}
-                </button>
-              </form>
-            </div>
-
-            <div style={sectionCardStyle}>
-              <p style={sectionLabelStyle}>Upload ticker file</p>
-              <form onSubmit={handleUploadSubmit} style={formStyle}>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Universe name</span>
-                  <input
-                    type="text"
-                    value={uploadName}
-                    onChange={(event) => setUploadName(event.target.value)}
-                    placeholder="Imported watchlist"
-                    style={inputStyle}
-                    required
-                  />
-                </label>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Description</span>
-                  <input
-                    type="text"
-                    value={uploadDescription}
-                    onChange={(event) => setUploadDescription(event.target.value)}
-                    placeholder="Uploaded from a newline-delimited text file"
-                    style={inputStyle}
-                  />
-                </label>
-                <label style={fieldStyle}>
-                  <span style={labelStyle}>Ticker file</span>
-                  <input
-                    type="file"
-                    accept=".txt,.csv,.lst,text/plain"
-                    onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-                    style={fileInputStyle}
-                    required
-                  />
-                </label>
-                <button type="submit" style={buttonStyle} disabled={isSubmitting === "upload"}>
-                  {isSubmitting === "upload" ? "Uploading..." : "Create uploaded universe"}
-                </button>
-              </form>
+              <p style={sectionLabelStyle}>When to use each option</p>
+              <div style={profileGridStyle}>
+                <article style={profileCardStyle}>
+                  <strong>Built-in profiles</strong>
+                  <p style={subtleMetaStyle}>
+                    Best default for broad coverage and first-time users.
+                  </p>
+                </article>
+                <article style={profileCardStyle}>
+                  <strong>Manual lists</strong>
+                  <p style={subtleMetaStyle}>
+                    Best for a short list of conviction names or a hand-curated watchlist.
+                  </p>
+                </article>
+                <article style={profileCardStyle}>
+                  <strong>Uploads</strong>
+                  <p style={subtleMetaStyle}>
+                    Best when the source ticker list already exists outside the app.
+                  </p>
+                </article>
+              </div>
             </div>
           </section>
 
@@ -439,12 +524,11 @@ function formatApiError(error: unknown, fallback: string): string {
 }
 
 const pageStyle: CSSProperties = {
-  minHeight: "100vh",
-  padding: "2rem",
+  padding: 0,
 };
 
 const panelStyle: CSSProperties = {
-  width: "min(1360px, 100%)",
+  width: "100%",
   margin: "0 auto",
   borderRadius: "28px",
   padding: "2rem",
@@ -503,6 +587,53 @@ const sectionLabelStyle: CSSProperties = {
   letterSpacing: "0.12em",
   textTransform: "uppercase",
   color: "#5c728d",
+};
+
+const sectionTitleStyle: CSSProperties = {
+  margin: "0.55rem 0 0",
+  fontSize: "1.55rem",
+};
+
+const modeHeaderStyle: CSSProperties = {
+  display: "grid",
+  gap: "1rem",
+};
+
+const modeSwitchStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.75rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  marginTop: "0.35rem",
+};
+
+const modeButtonStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.25rem",
+  textAlign: "left",
+  padding: "0.95rem 1rem",
+  borderRadius: "16px",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  background: "#fff",
+  color: "#162132",
+  cursor: "pointer",
+};
+
+const activeModeButtonStyle: CSSProperties = {
+  ...modeButtonStyle,
+  background: "#162132",
+  color: "#f5f7fb",
+  borderColor: "#162132",
+};
+
+const modeDescriptionStyle: CSSProperties = {
+  color: "inherit",
+  opacity: 0.8,
+};
+
+const modeSectionStyle: CSSProperties = {
+  display: "grid",
+  gap: "1rem",
+  marginTop: "1.2rem",
 };
 
 const formStyle: CSSProperties = {
@@ -596,6 +727,21 @@ const bodyStyle: CSSProperties = {
   maxWidth: "64rem",
   lineHeight: 1.6,
   color: "#334862",
+};
+
+const helperCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.35rem",
+  padding: "0.95rem 1rem",
+  borderRadius: "16px",
+  background: "#eef4fb",
+  color: "#203247",
+};
+
+const helperTextStyle: CSSProperties = {
+  margin: 0,
+  lineHeight: 1.5,
+  color: "#496280",
 };
 
 const metaStyle: CSSProperties = {

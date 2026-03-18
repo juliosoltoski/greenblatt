@@ -44,6 +44,7 @@ export function ScreenHub({ templateId, draftScreenRunId }: ScreenHubProps) {
   const [cacheTtlHours, setCacheTtlHours] = useState(24);
   const [isLaunching, setIsLaunching] = useState(false);
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -128,6 +129,7 @@ export function ScreenHub({ templateId, draftScreenRunId }: ScreenHubProps) {
       return;
     }
     applyScreenConfig(template.universe.id, template.config, availableUniverses);
+    setShowAdvanced(true);
     setDraftNotice(`Template applied: ${template.name}`);
   }
 
@@ -145,6 +147,7 @@ export function ScreenHub({ templateId, draftScreenRunId }: ScreenHubProps) {
       },
       availableUniverses,
     );
+    setShowAdvanced(true);
     setDraftNotice(`Draft loaded from screen #${run.id}`);
   }
 
@@ -248,32 +251,15 @@ export function ScreenHub({ templateId, draftScreenRunId }: ScreenHubProps) {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M5 Screening Vertical Slice</p>
-            <h1 style={titleStyle}>Launch and review real Magic Formula screens</h1>
-          </div>
-          <div style={actionRowStyle}>
-            <Link href="/app" style={ghostLinkStyle}>
-              App shell
-            </Link>
-            <Link href="/app/universes" style={ghostLinkStyle}>
-              Universes
-            </Link>
-            <Link href="/app/jobs" style={ghostLinkStyle}>
-              Jobs
-            </Link>
-            <Link href="/app/history" style={ghostLinkStyle}>
-              History
-            </Link>
-            <Link href="/app/templates" style={ghostLinkStyle}>
-              Templates
-            </Link>
+            <p style={eyebrowStyle}>Research</p>
+            <h1 style={titleStyle}>Run a screen from a saved universe</h1>
           </div>
         </div>
 
         <p style={bodyStyle}>
           Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Pick a
-          saved universe, configure the ranking inputs, and launch a persisted screen run that can be
-          revisited after refresh or re-login.
+          saved universe, keep the default launch settings for a first pass, and only open advanced
+          controls when you need sector filters or cache overrides.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -333,53 +319,81 @@ export function ScreenHub({ templateId, draftScreenRunId }: ScreenHubProps) {
                     </label>
                   </div>
                   <div style={twoColumnStyle}>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Sector allowlist</span>
-                      <input
-                        type="text"
-                        value={sectorAllowlist}
-                        onChange={(event) => setSectorAllowlist(event.target.value)}
-                        placeholder="Technology, Healthcare"
-                        style={inputStyle}
-                      />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Minimum market cap</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={minMarketCap}
-                        onChange={(event) => setMinMarketCap(event.target.value)}
-                        placeholder="10000000000"
-                        style={inputStyle}
-                      />
-                    </label>
+                    <div style={helperCardStyle}>
+                      <strong>Default flow</strong>
+                      <p style={helperTextStyle}>
+                        Universe, `Top N`, and momentum mode are enough for most initial runs.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      style={secondaryButtonStyle}
+                      onClick={() => setShowAdvanced((currentValue) => !currentValue)}
+                    >
+                      {showAdvanced ? "Hide advanced settings" : "Show advanced settings"}
+                    </button>
                   </div>
-                  <div style={twoColumnStyle}>
-                    <label style={checkboxFieldStyle}>
-                      <input type="checkbox" checked={useCache} onChange={(event) => setUseCache(event.target.checked)} />
-                      <span>Use cached provider data</span>
-                    </label>
-                    <label style={checkboxFieldStyle}>
-                      <input
-                        type="checkbox"
-                        checked={refreshCache}
-                        onChange={(event) => setRefreshCache(event.target.checked)}
-                      />
-                      <span>Refresh fundamentals cache first</span>
-                    </label>
-                  </div>
-                  <label style={fieldStyle}>
-                    <span style={labelStyle}>Cache TTL hours</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="1"
-                      value={cacheTtlHours}
-                      onChange={(event) => setCacheTtlHours(Number(event.target.value))}
-                      style={inputStyle}
-                    />
-                  </label>
+                  {showAdvanced ? (
+                    <div style={advancedCardStyle}>
+                      <div style={advancedHeaderStyle}>
+                        <div>
+                          <p style={sectionLabelStyle}>Advanced settings</p>
+                          <p style={advancedBodyStyle}>
+                            Use these when you need tighter filtering or want to override provider
+                            cache behavior.
+                          </p>
+                        </div>
+                      </div>
+                      <div style={twoColumnStyle}>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Sector allowlist</span>
+                          <input
+                            type="text"
+                            value={sectorAllowlist}
+                            onChange={(event) => setSectorAllowlist(event.target.value)}
+                            placeholder="Technology, Healthcare"
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Minimum market cap</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={minMarketCap}
+                            onChange={(event) => setMinMarketCap(event.target.value)}
+                            placeholder="10000000000"
+                            style={inputStyle}
+                          />
+                        </label>
+                      </div>
+                      <div style={twoColumnStyle}>
+                        <label style={checkboxFieldStyle}>
+                          <input type="checkbox" checked={useCache} onChange={(event) => setUseCache(event.target.checked)} />
+                          <span>Use cached provider data</span>
+                        </label>
+                        <label style={checkboxFieldStyle}>
+                          <input
+                            type="checkbox"
+                            checked={refreshCache}
+                            onChange={(event) => setRefreshCache(event.target.checked)}
+                          />
+                          <span>Refresh fundamentals cache first</span>
+                        </label>
+                      </div>
+                      <label style={fieldStyle}>
+                        <span style={labelStyle}>Cache TTL hours</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="1"
+                          value={cacheTtlHours}
+                          onChange={(event) => setCacheTtlHours(Number(event.target.value))}
+                          style={inputStyle}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
                   <button type="submit" style={buttonStyle} disabled={isLaunching}>
                     {isLaunching ? "Launching screen..." : "Launch screen"}
                   </button>
@@ -468,12 +482,11 @@ function stateBadgeStyle(state: ScreenRun["job"]["state"]): CSSProperties {
 }
 
 const pageStyle: CSSProperties = {
-  minHeight: "100vh",
-  padding: "2rem",
+  padding: 0,
 };
 
 const panelStyle: CSSProperties = {
-  width: "min(1360px, 100%)",
+  width: "100%",
   margin: "0 auto",
   borderRadius: "28px",
   padding: "2rem",
@@ -574,6 +587,12 @@ const buttonStyle: CSSProperties = {
   fontSize: "0.98rem",
 };
 
+const secondaryButtonStyle: CSSProperties = {
+  ...buttonStyle,
+  background: "#dde6f0",
+  color: "#162132",
+};
+
 const primaryLinkStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -615,6 +634,21 @@ const bodyStyle: CSSProperties = {
   color: "#334862",
 };
 
+const helperCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.35rem",
+  padding: "0.95rem 1rem",
+  borderRadius: "16px",
+  background: "#eef4fb",
+  color: "#203247",
+};
+
+const helperTextStyle: CSSProperties = {
+  margin: 0,
+  lineHeight: 1.5,
+  color: "#496280",
+};
+
 const errorStyle: CSSProperties = {
   marginTop: "1rem",
   padding: "0.9rem 1rem",
@@ -629,6 +663,29 @@ const infoStyle: CSSProperties = {
   borderRadius: "16px",
   background: "#e6f1ff",
   color: "#0f4c81",
+};
+
+const advancedCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.9rem",
+  padding: "1rem",
+  borderRadius: "18px",
+  background: "#fff",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+};
+
+const advancedHeaderStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "1rem",
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+};
+
+const advancedBodyStyle: CSSProperties = {
+  margin: "0.35rem 0 0",
+  lineHeight: 1.5,
+  color: "#5c728d",
 };
 
 const runListStyle: CSSProperties = {

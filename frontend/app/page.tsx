@@ -1,13 +1,12 @@
 import Link from "next/link";
 
 const checklist = [
-  "Django backend container",
-  "Next.js frontend container",
-  "PostgreSQL and Redis services",
-  "MinIO object storage",
-  "Celery worker and beat placeholders",
-  "Caddy reverse proxy",
-  "Session auth and workspace membership APIs",
+  "Saved universes, screens, and backtests",
+  "Reusable templates and run history",
+  "Schedules, alerts, and notification tracking",
+  "Provider diagnostics and failover",
+  "Docker Compose local stack and staging scripts",
+  "Django admin, health checks, and metrics",
 ];
 
 export default function Home() {
@@ -39,15 +38,15 @@ export default function Home() {
             color: "#496280",
           }}
         >
-          M0 Scaffold
+          Current Product
         </p>
         <h1 style={{ marginBottom: "0.75rem", fontSize: "clamp(2rem, 4vw, 3.25rem)" }}>
           Greenblatt Web App
         </h1>
         <p style={{ maxWidth: "54rem", lineHeight: 1.6, color: "#334862" }}>
-          The deployable platform skeleton is in place. The backend exposes health endpoints, the
-          reverse proxy routes traffic, and the local Docker stack includes the persistence and
-          worker services needed for the next milestones.
+          The platform now supports end-to-end research workflows: build universes, launch screens,
+          backtest the shortlist, save templates, automate schedules, and monitor long-running jobs
+          from one authenticated workspace.
         </p>
 
         <div
@@ -102,7 +101,7 @@ export default function Home() {
               textDecoration: "none",
             }}
           >
-            Open app shell
+            Open dashboard
           </Link>
           <code
             style={{

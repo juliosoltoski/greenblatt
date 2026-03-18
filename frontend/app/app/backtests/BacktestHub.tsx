@@ -56,6 +56,7 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
   const [cacheTtlHours, setCacheTtlHours] = useState(24);
   const [isLaunching, setIsLaunching] = useState(false);
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -145,6 +146,7 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
       return;
     }
     applyBacktestConfig(template.universe.id, template.config, availableUniverses);
+    setShowAdvanced(true);
     setDraftNotice(`Template applied: ${template.name}`);
   }
 
@@ -167,6 +169,7 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
       },
       availableUniverses,
     );
+    setShowAdvanced(true);
     setDraftNotice(`Draft loaded from backtest #${run.id}`);
   }
 
@@ -294,32 +297,15 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M6 Backtesting Vertical Slice</p>
-            <h1 style={titleStyle}>Launch and review persisted strategy backtests</h1>
-          </div>
-          <div style={actionRowStyle}>
-            <Link href="/app" style={ghostLinkStyle}>
-              App shell
-            </Link>
-            <Link href="/app/universes" style={ghostLinkStyle}>
-              Universes
-            </Link>
-            <Link href="/app/screens" style={ghostLinkStyle}>
-              Screens
-            </Link>
-            <Link href="/app/history" style={ghostLinkStyle}>
-              History
-            </Link>
-            <Link href="/app/templates" style={ghostLinkStyle}>
-              Templates
-            </Link>
+            <p style={eyebrowStyle}>Portfolio Research</p>
+            <h1 style={titleStyle}>Backtest a saved universe</h1>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Pick a
-          saved universe, set the rebalance window and capital assumptions, and persist a full
-          backtest with chart data, trades, review targets, and final holdings.
+          Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Start
+          with the default rebalance assumptions, choose a sensible date range, and only open
+          advanced settings when you need benchmark, filter, or cache overrides.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -361,10 +347,6 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
                       <span style={labelStyle}>End date</span>
                       <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} style={inputStyle} />
                     </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Benchmark</span>
-                      <input type="text" value={benchmark} onChange={(event) => setBenchmark(event.target.value)} style={inputStyle} />
-                    </label>
                   </div>
                   <div style={threeColumnStyle}>
                     <label style={fieldStyle}>
@@ -388,76 +370,109 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
                         style={inputStyle}
                       />
                     </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Review frequency</span>
-                      <input
-                        type="text"
-                        value={reviewFrequency}
-                        onChange={(event) => setReviewFrequency(event.target.value)}
-                        placeholder="W-FRI"
-                        style={inputStyle}
-                      />
-                    </label>
                   </div>
                   <div style={threeColumnStyle}>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Momentum mode</span>
-                      <select
-                        value={momentumMode}
-                        onChange={(event) => setMomentumMode(event.target.value as "none" | "overlay" | "filter")}
-                        style={inputStyle}
-                      >
-                        <option value="none">None</option>
-                        <option value="overlay">Overlay</option>
-                        <option value="filter">Filter</option>
-                      </select>
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Sector allowlist</span>
-                      <input
-                        type="text"
-                        value={sectorAllowlist}
-                        onChange={(event) => setSectorAllowlist(event.target.value)}
-                        placeholder="Technology, Healthcare"
-                        style={inputStyle}
-                      />
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Minimum market cap</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={minMarketCap}
-                        onChange={(event) => setMinMarketCap(event.target.value)}
-                        placeholder="5000000000"
-                        style={inputStyle}
-                      />
-                    </label>
+                    <div style={helperCardStyle}>
+                      <strong>Default flow</strong>
+                      <p style={helperTextStyle}>
+                        Universe, date range, portfolio size, and capital are enough for a clean
+                        first pass.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      style={secondaryButtonStyle}
+                      onClick={() => setShowAdvanced((currentValue) => !currentValue)}
+                    >
+                      {showAdvanced ? "Hide advanced settings" : "Show advanced settings"}
+                    </button>
                   </div>
-                  <div style={threeColumnStyle}>
-                    <label style={checkboxFieldStyle}>
-                      <input type="checkbox" checked={useCache} onChange={(event) => setUseCache(event.target.checked)} />
-                      <span>Use cached provider data</span>
-                    </label>
-                    <label style={checkboxFieldStyle}>
-                      <input
-                        type="checkbox"
-                        checked={refreshCache}
-                        onChange={(event) => setRefreshCache(event.target.checked)}
-                      />
-                      <span>Refresh fundamentals cache first</span>
-                    </label>
-                    <label style={fieldStyle}>
-                      <span style={labelStyle}>Cache TTL hours</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={cacheTtlHours}
-                        onChange={(event) => setCacheTtlHours(Number(event.target.value))}
-                        style={inputStyle}
-                      />
-                    </label>
-                  </div>
+                  {showAdvanced ? (
+                    <div style={advancedCardStyle}>
+                      <div>
+                        <p style={sectionLabelStyle}>Advanced settings</p>
+                        <p style={advancedBodyStyle}>
+                          Tune benchmark, rebalance cadence, filters, and cache controls only when
+                          the defaults are not enough.
+                        </p>
+                      </div>
+                      <div style={threeColumnStyle}>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Benchmark</span>
+                          <input type="text" value={benchmark} onChange={(event) => setBenchmark(event.target.value)} style={inputStyle} />
+                        </label>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Review frequency</span>
+                          <input
+                            type="text"
+                            value={reviewFrequency}
+                            onChange={(event) => setReviewFrequency(event.target.value)}
+                            placeholder="W-FRI"
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Momentum mode</span>
+                          <select
+                            value={momentumMode}
+                            onChange={(event) => setMomentumMode(event.target.value as "none" | "overlay" | "filter")}
+                            style={inputStyle}
+                          >
+                            <option value="none">None</option>
+                            <option value="overlay">Overlay</option>
+                            <option value="filter">Filter</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div style={threeColumnStyle}>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Sector allowlist</span>
+                          <input
+                            type="text"
+                            value={sectorAllowlist}
+                            onChange={(event) => setSectorAllowlist(event.target.value)}
+                            placeholder="Technology, Healthcare"
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Minimum market cap</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={minMarketCap}
+                            onChange={(event) => setMinMarketCap(event.target.value)}
+                            placeholder="5000000000"
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={fieldStyle}>
+                          <span style={labelStyle}>Cache TTL hours</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={cacheTtlHours}
+                            onChange={(event) => setCacheTtlHours(Number(event.target.value))}
+                            style={inputStyle}
+                          />
+                        </label>
+                      </div>
+                      <div style={threeColumnStyle}>
+                        <label style={checkboxFieldStyle}>
+                          <input type="checkbox" checked={useCache} onChange={(event) => setUseCache(event.target.checked)} />
+                          <span>Use cached provider data</span>
+                        </label>
+                        <label style={checkboxFieldStyle}>
+                          <input
+                            type="checkbox"
+                            checked={refreshCache}
+                            onChange={(event) => setRefreshCache(event.target.checked)}
+                          />
+                          <span>Refresh fundamentals cache first</span>
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
                   <button type="submit" style={buttonStyle} disabled={isLaunching}>
                     {isLaunching ? "Launching backtest..." : "Launch backtest"}
                   </button>
@@ -527,12 +542,11 @@ function stateBadgeStyle(state: BacktestRun["job"]["state"]): CSSProperties {
 }
 
 const pageStyle: CSSProperties = {
-  minHeight: "100vh",
-  padding: "2rem",
+  padding: 0,
 };
 
 const panelStyle: CSSProperties = {
-  width: "min(1360px, 100%)",
+  width: "100%",
   margin: "0 auto",
   borderRadius: "28px",
   padding: "2rem",
@@ -633,6 +647,12 @@ const buttonStyle: CSSProperties = {
   fontSize: "0.98rem",
 };
 
+const secondaryButtonStyle: CSSProperties = {
+  ...buttonStyle,
+  background: "#dde6f0",
+  color: "#162132",
+};
+
 const primaryLinkStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -674,6 +694,21 @@ const bodyStyle: CSSProperties = {
   color: "#334862",
 };
 
+const helperCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.35rem",
+  padding: "0.95rem 1rem",
+  borderRadius: "16px",
+  background: "#eef4fb",
+  color: "#203247",
+};
+
+const helperTextStyle: CSSProperties = {
+  margin: 0,
+  lineHeight: 1.5,
+  color: "#496280",
+};
+
 const errorStyle: CSSProperties = {
   marginTop: "1rem",
   padding: "0.9rem 1rem",
@@ -688,6 +723,21 @@ const infoStyle: CSSProperties = {
   borderRadius: "16px",
   background: "#e6f1ff",
   color: "#0f4c81",
+};
+
+const advancedCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.9rem",
+  padding: "1rem",
+  borderRadius: "18px",
+  background: "#fff",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+};
+
+const advancedBodyStyle: CSSProperties = {
+  margin: "0.35rem 0 0",
+  lineHeight: 1.5,
+  color: "#5c728d",
 };
 
 const statusHeaderStyle: CSSProperties = {
