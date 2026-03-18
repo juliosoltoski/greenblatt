@@ -4,11 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from greenblatt.engine import MagicFormulaEngine
 from greenblatt.models import BacktestConfig, ScreenConfig
-from greenblatt.providers.yahoo import YahooFinanceProvider
-from greenblatt.simulation import MagicFormulaBacktester
-from greenblatt.universe import list_profiles, load_custom_universe, resolve_profile
+from greenblatt.services import BacktestRequest, BacktestService, ProviderConfig, ScreenRequest, ScreenService, UniverseRequest, UniverseService
 from greenblatt.utils import parse_date
 
 
@@ -72,24 +69,15 @@ def main() -> None:
 
 
 def _run_universes(_: argparse.Namespace) -> None:
-    for profile in list_profiles():
+    for profile in UniverseService().list_profiles():
         print(f"{profile.key}: {profile.description} [{profile.source}]")
 
 
 def _run_screen(args: argparse.Namespace) -> None:
-    provider = _build_provider(args)
-    tickers = _resolve_universe(args, provider)
-    engine = MagicFormulaEngine()
-    result = engine.screen(
-        provider.get_snapshots(tickers, include_momentum=args.momentum_mode != "none"),
-        ScreenConfig(
-            top_n=args.top,
-            momentum_mode=args.momentum_mode,
-            sector_allowlist=_parse_sector_allowlist(args.sector),
-            min_market_cap=args.min_market_cap,
-        ),
+    response = ScreenService().run(
+        _build_screen_request(args),
     )
-    frame = engine.to_frame(result)
+    frame = response.ranked_frame
     if args.output:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,11 +85,10 @@ def _run_screen(args: argparse.Namespace) -> None:
     if args.exclusions_output:
         exclusion_path = Path(args.exclusions_output)
         exclusion_path.parent.mkdir(parents=True, exist_ok=True)
-        exclusion_records = [{"ticker": item.ticker, "reason": item.reason} for item in result.excluded]
-        if exclusion_records:
+        if response.excluded_rows:
             import pandas as pd
 
-            pd.DataFrame(exclusion_records).to_csv(exclusion_path, index=False)
+            pd.DataFrame(response.excluded_rows).to_csv(exclusion_path, index=False)
         else:
             exclusion_path.write_text("ticker,reason\n", encoding="utf-8")
     if frame.empty:
@@ -111,12 +98,40 @@ def _run_screen(args: argparse.Namespace) -> None:
 
 
 def _run_simulate(args: argparse.Namespace) -> None:
-    provider = _build_provider(args)
-    tickers = _resolve_universe(args, provider)
-    backtester = MagicFormulaBacktester(provider)
-    result = backtester.run(
-        tickers,
-        BacktestConfig(
+    response = BacktestService().run(
+        _build_backtest_request(args),
+    )
+
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    response.equity_curve_frame.to_csv(output_dir / "equity_curve.csv", index=False)
+    response.trades_frame.to_csv(output_dir / "trades.csv", index=False)
+    if response.trade_summary_frame is not None:
+        response.trade_summary_frame.to_csv(output_dir / "trade_summary.csv", index=False)
+    if response.review_targets_frame is not None:
+        response.review_targets_frame.to_csv(output_dir / "review_targets.csv", index=False)
+    response.final_holdings_frame.to_csv(output_dir / "final_holdings.csv", index=False)
+    (output_dir / "summary.json").write_text(json.dumps(response.summary_payload, indent=2), encoding="utf-8")
+    print(json.dumps(response.summary_payload, indent=2))
+
+
+def _build_screen_request(args: argparse.Namespace) -> ScreenRequest:
+    return ScreenRequest(
+        universe=_build_universe_request(args),
+        config=ScreenConfig(
+            top_n=args.top,
+            momentum_mode=args.momentum_mode,
+            sector_allowlist=_parse_sector_allowlist(args.sector),
+            min_market_cap=args.min_market_cap,
+        ),
+        provider=_build_provider_config(args),
+    )
+
+
+def _build_backtest_request(args: argparse.Namespace) -> BacktestRequest:
+    return BacktestRequest(
+        universe=_build_universe_request(args),
+        config=BacktestConfig(
             start_date=parse_date(args.start),
             end_date=parse_date(args.end),
             initial_capital=args.capital,
@@ -126,19 +141,8 @@ def _run_simulate(args: argparse.Namespace) -> None:
             sector_allowlist=_parse_sector_allowlist(args.sector),
             min_market_cap=args.min_market_cap,
         ),
+        provider=_build_provider_config(args),
     )
-
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    result.equity_curve.to_csv(output_dir / "equity_curve.csv", index=False)
-    result.trades.to_csv(output_dir / "trades.csv", index=False)
-    if result.trade_summary is not None:
-        result.trade_summary.to_csv(output_dir / "trade_summary.csv", index=False)
-    if result.review_targets is not None:
-        result.review_targets.to_csv(output_dir / "review_targets.csv", index=False)
-    MagicFormulaBacktester.build_final_holdings_frame(result.holdings).to_csv(output_dir / "final_holdings.csv", index=False)
-    (output_dir / "summary.json").write_text(json.dumps(result.summary, indent=2), encoding="utf-8")
-    print(json.dumps(result.summary, indent=2))
 
 
 def _add_universe_arguments(parser: argparse.ArgumentParser) -> None:
@@ -167,18 +171,15 @@ def _add_cache_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _resolve_universe(args: argparse.Namespace, provider: YahooFinanceProvider) -> list[str]:
+def _build_universe_request(args: argparse.Namespace) -> UniverseRequest:
     if getattr(args, "profile", None):
-        tickers = resolve_profile(provider, args.profile)
-    elif getattr(args, "universe_file", None):
-        tickers = load_custom_universe(args.universe_file)
-    else:
-        tickers = [ticker.strip() for ticker in args.tickers.split(",") if ticker.strip()]
-
-    candidate_limit = getattr(args, "candidate_limit", None)
-    if candidate_limit:
-        return tickers[:candidate_limit]
-    return tickers
+        return UniverseRequest(profile=args.profile, candidate_limit=getattr(args, "candidate_limit", None))
+    if getattr(args, "universe_file", None):
+        return UniverseRequest(universe_file=args.universe_file, candidate_limit=getattr(args, "candidate_limit", None))
+    return UniverseRequest(
+        tickers=[ticker.strip() for ticker in args.tickers.split(",") if ticker.strip()],
+        candidate_limit=getattr(args, "candidate_limit", None),
+    )
 
 
 def _parse_sector_allowlist(raw: str | None) -> set[str] | None:
@@ -187,8 +188,8 @@ def _parse_sector_allowlist(raw: str | None) -> set[str] | None:
     return {item.strip() for item in raw.split(",") if item.strip()}
 
 
-def _build_provider(args: argparse.Namespace) -> YahooFinanceProvider:
-    return YahooFinanceProvider(
+def _build_provider_config(args: argparse.Namespace) -> ProviderConfig:
+    return ProviderConfig(
         use_cache=not args.no_cache,
         refresh_cache=args.refresh_cache,
         cache_ttl_hours=args.cache_ttl_hours,

@@ -2,14 +2,16 @@ FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app:/opt/greenblatt/src
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+COPY backend/requirements.txt /tmp/requirements.txt
+COPY src /opt/greenblatt/src
+RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
 
-COPY . .
+COPY backend /app
 
 EXPOSE 8000
 

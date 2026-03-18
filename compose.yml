@@ -43,13 +43,18 @@ services:
       - minio_data:/data
 
   backend:
+    image: greenblatt-backend:latest
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
+      PYTHONPATH: ${PYTHONPATH:-/app:/opt/greenblatt/src}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-changeme-in-real-environments}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,proxy}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080}
+      ARTIFACT_STORAGE_BACKEND: ${ARTIFACT_STORAGE_BACKEND:-filesystem}
+      ARTIFACT_STORAGE_ROOT: ${ARTIFACT_STORAGE_ROOT:-/var/lib/greenblatt/artifacts}
       POSTGRES_DB: ${POSTGRES_DB:-greenblatt}
       POSTGRES_USER: ${POSTGRES_USER:-greenblatt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenblatt}
@@ -58,6 +63,14 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-false}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-false}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-greenblatt@example.test}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_BUCKET: ${MINIO_BUCKET:-greenblatt-artifacts}
     depends_on:
@@ -65,6 +78,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - backend_artifacts:/var/lib/greenblatt/artifacts
     healthcheck:
       test:
         [
@@ -79,13 +94,18 @@ services:
       start_period: 20s
 
   worker:
+    image: greenblatt-backend:latest
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     command: ["celery", "-A", "config", "worker", "--loglevel=info", "--pool=solo"]
     environment:
+      PYTHONPATH: ${PYTHONPATH:-/app:/opt/greenblatt/src}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-changeme-in-real-environments}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,proxy}
+      ARTIFACT_STORAGE_BACKEND: ${ARTIFACT_STORAGE_BACKEND:-filesystem}
+      ARTIFACT_STORAGE_ROOT: ${ARTIFACT_STORAGE_ROOT:-/var/lib/greenblatt/artifacts}
       POSTGRES_DB: ${POSTGRES_DB:-greenblatt}
       POSTGRES_USER: ${POSTGRES_USER:-greenblatt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenblatt}
@@ -94,20 +114,37 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-false}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-false}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-greenblatt@example.test}
     depends_on:
+      backend:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - backend_artifacts:/var/lib/greenblatt/artifacts
 
   beat:
+    image: greenblatt-backend:latest
     build:
-      context: ./backend
-    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["celery", "-A", "config", "beat", "--loglevel=info", "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
     environment:
+      PYTHONPATH: ${PYTHONPATH:-/app:/opt/greenblatt/src}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-changeme-in-real-environments}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,proxy}
+      ARTIFACT_STORAGE_BACKEND: ${ARTIFACT_STORAGE_BACKEND:-filesystem}
+      ARTIFACT_STORAGE_ROOT: ${ARTIFACT_STORAGE_ROOT:-/var/lib/greenblatt/artifacts}
       POSTGRES_DB: ${POSTGRES_DB:-greenblatt}
       POSTGRES_USER: ${POSTGRES_USER:-greenblatt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenblatt}
@@ -116,13 +153,26 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-false}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-false}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-greenblatt@example.test}
     depends_on:
+      backend:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - backend_artifacts:/var/lib/greenblatt/artifacts
 
   frontend:
+    image: greenblatt-frontend:latest
     build:
       context: ./frontend
     environment:
@@ -160,3 +210,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  backend_artifacts:

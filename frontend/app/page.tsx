@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const checklist = [
   "Django backend container",
   "Next.js frontend container",
@@ -5,6 +7,7 @@ const checklist = [
   "MinIO object storage",
   "Celery worker and beat placeholders",
   "Caddy reverse proxy",
+  "Session auth and workspace membership APIs",
 ];
 
 export default function Home() {
@@ -71,6 +74,36 @@ export default function Home() {
         </div>
 
         <div style={{ marginTop: "2rem", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          <Link
+            href="/login"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0.65rem 0.9rem",
+              borderRadius: "999px",
+              background: "#162132",
+              color: "#f5f7fb",
+              textDecoration: "none",
+            }}
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/app"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0.65rem 0.9rem",
+              borderRadius: "999px",
+              background: "#dde6f0",
+              color: "#162132",
+              textDecoration: "none",
+            }}
+          >
+            Open app shell
+          </Link>
           <code
             style={{
               padding: "0.65rem 0.9rem",

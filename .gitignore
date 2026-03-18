@@ -73,5 +73,7 @@ media/
 # Web app scaffold
 backend/staticfiles/
 backend/db.sqlite3
+backend/.artifacts/
+backend/celerybeat-schedule*
 frontend/.next/
 frontend/node_modules/

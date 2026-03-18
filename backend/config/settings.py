@@ -35,8 +35,17 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_celery_beat",
     "rest_framework",
+    "apps.accounts",
+    "apps.automation",
+    "apps.backtests",
     "apps.core",
+    "apps.jobs",
+    "apps.screens",
+    "apps.strategy_templates",
+    "apps.universes",
+    "apps.workspaces",
 ]
 
 MIDDLEWARE = [
@@ -103,6 +112,9 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
@@ -111,5 +123,35 @@ REST_FRAMEWORK = {
 REDIS_URL = _env("REDIS_URL", "redis://redis:6379/0")
 CELERY_BROKER_URL = _env("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = _env("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
+CELERY_TASK_ALWAYS_EAGER = _env_bool("CELERY_TASK_ALWAYS_EAGER", False)
+CELERY_TASK_EAGER_PROPAGATES = _env_bool("CELERY_TASK_EAGER_PROPAGATES", False)
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_TASK_SOFT_TIME_LIMIT = int(_env("CELERY_TASK_SOFT_TIME_LIMIT", "1500") or "1500")
+CELERY_TASK_TIME_LIMIT = int(_env("CELERY_TASK_TIME_LIMIT", "1800") or "1800")
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_ROUTES = {
+    "automation.run_scheduled_template": {"queue": "default"},
+    "backtests.run_backtest_job": {"queue": "default"},
+    "jobs.run_smoke_job": {"queue": "default"},
+    "screens.run_screen_job": {"queue": "default"},
+}
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+ARTIFACT_STORAGE_BACKEND = _env("ARTIFACT_STORAGE_BACKEND", "filesystem")
+ARTIFACT_STORAGE_ROOT = Path(_env("ARTIFACT_STORAGE_ROOT", str(BASE_DIR / ".artifacts")))
+ARTIFACT_ORPHAN_RETENTION_HOURS = float(_env("ARTIFACT_ORPHAN_RETENTION_HOURS", "24") or "24")
+
+EMAIL_BACKEND = _env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = _env("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(_env("EMAIL_PORT", "25") or "25")
+EMAIL_HOST_USER = _env("EMAIL_HOST_USER", "") or ""
+EMAIL_HOST_PASSWORD = _env("EMAIL_HOST_PASSWORD", "") or ""
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", False)
+EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL", False)
+DEFAULT_FROM_EMAIL = _env("DEFAULT_FROM_EMAIL", "greenblatt@example.test") or "greenblatt@example.test"

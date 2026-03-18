@@ -40,11 +40,75 @@ docker compose -f compose.yml -f compose.dev.yml up --build
 Useful URLs:
 
 - `http://localhost:8080/` - frontend placeholder
+- `http://localhost:8080/login` - sign-in page
+- `http://localhost:8080/app` - protected app shell
+- `http://localhost:8080/app/jobs` - Celery smoke-job launcher and status polling UI
+- `http://localhost:8080/app/screens` - real screening launcher and persisted result review
+- `http://localhost:8080/app/backtests` - persisted backtest launcher with equity curve and trade review
+- `http://localhost:8080/app/templates` - reusable screen and backtest templates
+- `http://localhost:8080/app/history` - prior run history with compare and template actions
+- `http://localhost:8080/app/schedules` - recurring template schedules backed by `django-celery-beat`
+- `http://localhost:8080/app/alerts` - alert-rule management and recent notification delivery history
 - `http://localhost:8080/health/live/` - backend liveness
 - `http://localhost:8080/health/ready/` - backend readiness
 - `http://localhost:9001/` - MinIO console
 
 Local Redis is published on host port `6380` by default so it does not conflict with a Redis instance already running on `6379`.
+
+To access the authenticated frontend, create a Django user first:
+
+```bash
+docker compose -f compose.yml -f compose.dev.yml exec backend python manage.py createsuperuser
+```
+
+Each new Django user automatically gets a personal workspace and an owner membership.
+
+Email notifications default to Django's console backend in local development. To deliver real email,
+set the SMTP-related variables from [.env.example](/home/jsoltoski/greenblatt/.env.example) before starting the stack.
+
+To smoke-test the async job pipeline after logging in:
+
+1. Open `http://localhost:8080/app/jobs`.
+2. Launch the default smoke job.
+3. Watch the run move from `queued` to `running` to `succeeded`, or choose a failure mode to inspect retries and error capture.
+
+To smoke-test the first real screening workflow:
+
+1. Create or open a saved universe at `http://localhost:8080/app/universes`.
+2. Open `http://localhost:8080/app/screens`.
+3. Launch a screen from the saved universe.
+4. Open the resulting screen detail page and verify the ranked rows, exclusions, and CSV export link.
+
+To smoke-test the backtesting workflow:
+
+1. Create or open a saved universe at `http://localhost:8080/app/universes`.
+2. Open `http://localhost:8080/app/backtests`.
+3. Launch a backtest with a small saved universe and a short date range.
+4. Open the resulting backtest detail page and verify the equity curve, trade ledger, final holdings, review targets, and export download link.
+
+To smoke-test M7 templates and history:
+
+1. Launch at least one screen or backtest so the workspace has persisted runs.
+2. Open `http://localhost:8080/app/history`.
+3. Save one prior run as a template, then open `http://localhost:8080/app/templates`.
+4. Use the template as a draft or launch it directly and verify a new run is created.
+5. Select two runs of the same type in history and open the compare view.
+
+To smoke-test M8 schedules and alerts:
+
+1. Make sure your Django user has an email or set an explicit destination email in the forms.
+2. Open `http://localhost:8080/app/templates` and confirm you have at least one saved template.
+3. Open `http://localhost:8080/app/schedules` and create a recurring schedule from that template.
+4. Use the schedule's `Run now` action to launch it immediately and confirm a new screen or backtest run is created.
+5. Open `http://localhost:8080/app/alerts`, create either a `run failed`, `screen completed`, `backtest completed`, or `ticker entered top N` rule, then launch a matching run.
+6. Verify the resulting notification event appears in the alerts page and, with real SMTP configured, is delivered by email.
+
+To clean up orphaned filesystem artifacts that are no longer referenced by uploads or run exports:
+
+```bash
+docker compose -f compose.yml -f compose.dev.yml exec backend \
+  python manage.py cleanup_artifacts --dry-run
+```
 
 ## Quick Start
 
