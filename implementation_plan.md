@@ -1,5 +1,12 @@
 # Implementation Plan: Greenblatt Web App
 
+## Status Note
+
+Milestones `M0` through `M10` in this document have been implemented.
+
+This file should now be treated as the completed delivery record for the first deployable version.
+Future application work should continue in [nice_to_have_implementation_plan.md](/home/jsoltoski/greenblatt/nice_to_have_implementation_plan.md).
+
 ## 1. Purpose
 
 This document turns `product_plan.md` into an execution plan that can be implemented incrementally without a risky rewrite.

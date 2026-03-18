@@ -1,5 +1,12 @@
 # Product Plan: Greenblatt Web App
 
+## Status Note
+
+This document remains the product and architecture reference for the Greenblatt web app.
+
+The initial delivery roadmap described here has been executed through `M10` in [implementation_plan.md](/home/jsoltoski/greenblatt/implementation_plan.md).
+Future polish, deferred scope, and post-M10 roadmap work now live in [nice_to_have_implementation_plan.md](/home/jsoltoski/greenblatt/nice_to_have_implementation_plan.md).
+
 ## 1. Objective
 
 Turn the current CLI-based screening and backtesting engine into a deployable web application that supports:

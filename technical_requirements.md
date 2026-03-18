@@ -1,4 +1,12 @@
-Technical Requirements Document: Automated Greenblatt "Magic Formula" Screener & Simulation Engine
+# Technical Requirements: Automated Greenblatt "Magic Formula" Screener & Simulation Engine
+
+This document is the investment, data, and functional baseline for the project.
+
+Use it together with:
+
+- [product_plan.md](/home/jsoltoski/greenblatt/product_plan.md) for product and architecture decisions
+- [implementation_plan.md](/home/jsoltoski/greenblatt/implementation_plan.md) for the completed M0-M10 delivery record
+- [nice_to_have_implementation_plan.md](/home/jsoltoski/greenblatt/nice_to_have_implementation_plan.md) for post-M10 roadmap work
 
 1. Executive Project Charter & Investment Philosophy
 

@@ -2,6 +2,19 @@
 
 Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy with pluggable market data providers.
 
+## Documentation Map
+
+- [technical_requirements.md](/home/jsoltoski/greenblatt/technical_requirements.md): investment logic, provider constraints, and functional baseline
+- [product_plan.md](/home/jsoltoski/greenblatt/product_plan.md): product shape, architecture, and system design reference
+- [implementation_plan.md](/home/jsoltoski/greenblatt/implementation_plan.md): the original M0-M10 execution roadmap, now completed
+- [nice_to_have_implementation_plan.md](/home/jsoltoski/greenblatt/nice_to_have_implementation_plan.md): active post-M10 roadmap for product polish, UX, and deferred enhancements
+
+## Status Snapshot
+
+- Milestones `M0` through `M10` are implemented.
+- The current focus should shift from core platform delivery to UX simplification, workflow polish, collaboration, and documentation quality.
+- Public-cloud infrastructure and full live deployment should be planned in a separate future document rather than folded into the application roadmap.
+
 ## Features
 
 - Current Magic Formula screening using EBIT, return on capital, and earnings yield.
@@ -21,9 +34,9 @@ uv pip install -e '.[dev]'
 
 All examples below assume the `greenblatt` console script is available after installation. If you prefer running the module directly, replace `greenblatt` with `PYTHONPATH=src python -m greenblatt.cli`.
 
-## Web App Scaffold
+## Web App
 
-Milestone `M0` now includes a runnable web-platform scaffold alongside the CLI project:
+Milestones `M0` through `M10` now provide a runnable web platform alongside the CLI project:
 
 - Django backend in [`backend/`](/home/jsoltoski/greenblatt/backend)
 - Next.js frontend in [`frontend/`](/home/jsoltoski/greenblatt/frontend)
