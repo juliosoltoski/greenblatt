@@ -17,7 +17,7 @@ from apps.screens.presenters import (
     serialize_screen_run,
     serialize_screen_run_bundle,
 )
-from apps.screens.serializers import PagingSerializer, ScreenLaunchSerializer, ScreenRunListSerializer
+from apps.screens.serializers import PagingSerializer, ScreenLaunchSerializer, ScreenRunListSerializer, ScreenRunUpdateSerializer
 from apps.screens.services import ScreenLaunchRequest, ScreenRunService
 from apps.universes.models import Universe
 from apps.universes.services import flatten_errors
@@ -77,6 +77,8 @@ class ScreenListCreateView(MethodScopedThrottleMixin, APIView):
         job_state = serializer.validated_data.get("job_state")
         if job_state:
             queryset = queryset.filter(job__state=job_state)
+        if serializer.validated_data.get("starred_only"):
+            queryset = queryset.filter(is_starred=True)
         page_size = serializer.validated_data.get("limit") or serializer.validated_data["page_size"]
         paginator, page_obj = _paginate_queryset(
             queryset,
@@ -145,6 +147,25 @@ class ScreenDetailView(APIView):
 
     def get(self, request, screen_run_id: int):
         screen_run = get_object_or_404(_screen_queryset(request.user), pk=screen_run_id)
+        return Response(serialize_screen_run(screen_run))
+
+    def patch(self, request, screen_run_id: int):
+        screen_run = get_object_or_404(_screen_queryset(request.user), pk=screen_run_id)
+        require_workspace_role(
+            request.user,
+            screen_run.workspace,
+            "analyst",
+            "You need analyst access or higher to update run annotations.",
+        )
+        serializer = ScreenRunUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        if "is_starred" in serializer.validated_data:
+            screen_run.is_starred = serializer.validated_data["is_starred"]
+        if "tags" in serializer.validated_data:
+            screen_run.tags = serializer.validated_data["tags"]
+        if "notes" in serializer.validated_data:
+            screen_run.notes = serializer.validated_data["notes"].strip()
+        screen_run.save(update_fields=["is_starred", "tags", "notes", "updated_at"])
         return Response(serialize_screen_run(screen_run))
 
 

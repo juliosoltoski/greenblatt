@@ -12,6 +12,7 @@ export default async function ScreensPage({ searchParams }: ScreensPageProps) {
     <ScreenHub
       templateId={typeof resolved.template_id === "string" ? Number(resolved.template_id) : null}
       draftScreenRunId={typeof resolved.draft_screen_run_id === "string" ? Number(resolved.draft_screen_run_id) : null}
+      presetId={typeof resolved.preset === "string" ? resolved.preset : null}
     />
   );
 }

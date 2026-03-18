@@ -138,11 +138,24 @@ class UniverseApiTests(TestCase):
 
         patch_response = self.client.patch(
             f"/api/v1/universes/{universe.id}/",
-            data={"name": "Renamed Universe", "description": "Updated"},
+            data={
+                "name": "Renamed Universe",
+                "description": "Updated",
+                "is_starred": True,
+                "tags": ["favorite", "review"],
+                "notes": "First pass notes",
+            },
             content_type="application/json",
         )
         self.assertEqual(patch_response.status_code, 200)
         self.assertEqual(patch_response.json()["name"], "Renamed Universe")
+        self.assertTrue(patch_response.json()["is_starred"])
+        self.assertEqual(patch_response.json()["tags"], ["favorite", "review"])
+        self.assertEqual(patch_response.json()["notes"], "First pass notes")
+
+        listing = self.client.get("/api/v1/universes/?starred_only=true")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json()["results"][0]["id"], universe.id)
 
         delete_response = self.client.delete(f"/api/v1/universes/{universe.id}/")
         self.assertEqual(delete_response.status_code, 204)

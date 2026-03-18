@@ -16,6 +16,7 @@ import {
   type UniverseProfile,
   type UniverseSummary,
 } from "@/lib/api";
+import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
 type UniverseCreationMode = "profile" | "manual" | "upload";
@@ -60,6 +61,16 @@ export function UniverseHub() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<"manual" | "profile" | "upload" | null>(null);
   const [creationMode, setCreationMode] = useState<UniverseCreationMode>("profile");
+  const [starredOnly, setStarredOnly] = useState(false);
+
+  useEffect(() => {
+    const preference = readViewPreference<{ starredOnly: boolean }>("universe-hub", { starredOnly: false });
+    setStarredOnly(preference.starredOnly);
+  }, []);
+
+  useEffect(() => {
+    writeViewPreference("universe-hub", { starredOnly });
+  }, [starredOnly]);
 
   useEffect(() => {
     let active = true;
@@ -70,7 +81,7 @@ export function UniverseHub() {
         const workspaceId = currentUser.active_workspace?.id;
         const [profileResults, universeResults] = await Promise.all([
           getUniverseProfiles(),
-          listUniverses(workspaceId),
+          listUniverses(workspaceId, { starredOnly }),
         ]);
         if (!active) {
           return;
@@ -101,11 +112,11 @@ export function UniverseHub() {
     return () => {
       active = false;
     };
-  }, [router]);
+  }, [router, starredOnly]);
 
   async function refreshUniverses(currentUser: CurrentUser) {
     const workspaceId = currentUser.active_workspace?.id;
-    const payload = await listUniverses(workspaceId);
+    const payload = await listUniverses(workspaceId, { starredOnly });
     setUniverses(payload.results);
   }
 
@@ -476,7 +487,10 @@ export function UniverseHub() {
                   <p style={sectionLabelStyle}>Saved universes</p>
                   <h2 style={sidebarTitleStyle}>{universes.length}</h2>
                 </div>
-                <span style={pillStyle}>Preview first 10</span>
+                <label style={filterPillStyle}>
+                  <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+                  <span>Starred only</span>
+                </label>
               </div>
               <div style={universeListStyle}>
                 {universes.length === 0 ? (
@@ -485,10 +499,22 @@ export function UniverseHub() {
                   universes.map((universe) => (
                     <Link key={universe.id} href={`/app/universes/${universe.id}`} style={universeRowStyle}>
                       <div>
-                        <strong>{universe.name}</strong>
+                        <div style={universeTitleRowStyle}>
+                          <strong>{universe.name}</strong>
+                          {universe.is_starred ? <span style={miniStarStyle}>Starred</span> : null}
+                        </div>
                         <div style={metaStyle}>
                           {universe.source_type.replaceAll("_", " ")} · {universe.entry_count} tickers
                         </div>
+                        {universe.tags.length > 0 ? (
+                          <div style={tickerWrapStyle}>
+                            {universe.tags.map((tag) => (
+                              <span key={tag} style={miniTagStyle}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         {universe.preview_tickers.length > 0 ? (
                           <div style={tickerWrapStyle}>
                             {universe.preview_tickers.map((ticker) => (
@@ -567,6 +593,17 @@ const sidebarHeaderStyle: CSSProperties = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: "1rem",
+};
+
+const filterPillStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.45rem",
+  padding: "0.45rem 0.7rem",
+  borderRadius: "999px",
+  background: "#dde6f0",
+  color: "#162132",
+  fontSize: "0.82rem",
 };
 
 const sidebarTitleStyle: CSSProperties = {
@@ -828,6 +865,29 @@ const universeRowStyle: CSSProperties = {
   borderRadius: "18px",
   background: "#fff",
   border: "1px solid rgba(73, 98, 128, 0.18)",
+};
+
+const universeTitleRowStyle: CSSProperties = {
+  display: "flex",
+  gap: "0.5rem",
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const miniStarStyle: CSSProperties = {
+  padding: "0.2rem 0.45rem",
+  borderRadius: "999px",
+  background: "#fff4cc",
+  color: "#8b5c00",
+  fontSize: "0.76rem",
+};
+
+const miniTagStyle: CSSProperties = {
+  padding: "0.22rem 0.45rem",
+  borderRadius: "999px",
+  background: "#dde6f0",
+  color: "#334862",
+  fontSize: "0.76rem",
 };
 
 const arrowStyle: CSSProperties = {

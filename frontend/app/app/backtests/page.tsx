@@ -12,6 +12,7 @@ export default async function BacktestsPage({ searchParams }: BacktestsPageProps
     <BacktestHub
       templateId={typeof resolved.template_id === "string" ? Number(resolved.template_id) : null}
       draftBacktestRunId={typeof resolved.draft_backtest_run_id === "string" ? Number(resolved.draft_backtest_run_id) : null}
+      presetId={typeof resolved.preset === "string" ? resolved.preset : null}
     />
   );
 }

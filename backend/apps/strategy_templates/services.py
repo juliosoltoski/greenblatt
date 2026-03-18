@@ -25,6 +25,9 @@ class StrategyTemplateDefinition:
     workflow_kind: str
     universe: Universe
     config: dict[str, object]
+    is_starred: bool = False
+    tags: list[str] | None = None
+    notes: str = ""
     source_screen_run: ScreenRun | None = None
     source_backtest_run: BacktestRun | None = None
 
@@ -142,6 +145,9 @@ class StrategyTemplateService:
             workflow_kind=definition.workflow_kind,
             universe=definition.universe,
             config=definition.config,
+            is_starred=definition.is_starred,
+            tags=definition.tags or [],
+            notes=definition.notes,
             source_screen_run=definition.source_screen_run,
             source_backtest_run=definition.source_backtest_run,
         )
@@ -154,6 +160,9 @@ class StrategyTemplateService:
         description: str | None = None,
         universe: Universe | None = None,
         config: dict[str, object] | None = None,
+        is_starred: bool | None = None,
+        tags: list[str] | None = None,
+        notes: str | None = None,
     ) -> StrategyTemplate:
         if name is not None:
             template.name = name
@@ -163,6 +172,12 @@ class StrategyTemplateService:
             template.universe = universe
         if config is not None:
             template.config = normalize_template_config(template.workflow_kind, config)
+        if is_starred is not None:
+            template.is_starred = is_starred
+        if tags is not None:
+            template.tags = tags
+        if notes is not None:
+            template.notes = notes.strip()
         template.save()
         return template
 

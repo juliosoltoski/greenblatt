@@ -19,7 +19,7 @@ from apps.backtests.presenters import (
     serialize_backtest_run_bundle,
     serialize_backtest_trade,
 )
-from apps.backtests.serializers import BacktestLaunchSerializer, BacktestRunListSerializer, PagingSerializer
+from apps.backtests.serializers import BacktestLaunchSerializer, BacktestRunListSerializer, BacktestRunUpdateSerializer, PagingSerializer
 from apps.backtests.services import BacktestLaunchRequest, BacktestRunService
 from apps.universes.models import Universe
 from apps.universes.services import flatten_errors
@@ -97,6 +97,8 @@ class BacktestListCreateView(MethodScopedThrottleMixin, APIView):
         job_state = serializer.validated_data.get("job_state")
         if job_state:
             queryset = queryset.filter(job__state=job_state)
+        if serializer.validated_data.get("starred_only"):
+            queryset = queryset.filter(is_starred=True)
         page_size = serializer.validated_data.get("limit") or serializer.validated_data["page_size"]
         paginator, page_obj = _paginate_queryset(
             queryset,
@@ -167,6 +169,25 @@ class BacktestDetailView(APIView):
 
     def get(self, request, backtest_run_id: int):
         backtest_run = get_object_or_404(_backtest_queryset(request.user), pk=backtest_run_id)
+        return Response(serialize_backtest_run(backtest_run))
+
+    def patch(self, request, backtest_run_id: int):
+        backtest_run = get_object_or_404(_backtest_queryset(request.user), pk=backtest_run_id)
+        require_workspace_role(
+            request.user,
+            backtest_run.workspace,
+            "analyst",
+            "You need analyst access or higher to update run annotations.",
+        )
+        serializer = BacktestRunUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        if "is_starred" in serializer.validated_data:
+            backtest_run.is_starred = serializer.validated_data["is_starred"]
+        if "tags" in serializer.validated_data:
+            backtest_run.tags = serializer.validated_data["tags"]
+        if "notes" in serializer.validated_data:
+            backtest_run.notes = serializer.validated_data["notes"].strip()
+        backtest_run.save(update_fields=["is_starred", "tags", "notes", "updated_at"])
         return Response(serialize_backtest_run(backtest_run))
 
 

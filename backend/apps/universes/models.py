@@ -56,6 +56,9 @@ class Universe(models.Model):
         blank=True,
         related_name="source_universes",
     )
+    is_starred = models.BooleanField(default=False)
+    tags = models.JSONField(default=list, blank=True)
+    notes = models.TextField(blank=True)
     entry_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

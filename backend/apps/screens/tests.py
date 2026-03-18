@@ -216,6 +216,20 @@ class ScreenApiTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["id"], payload["id"])
 
+        updated = self.client.patch(
+            f"/api/v1/screens/{payload['id']}/",
+            data={"is_starred": True, "tags": ["keeper"], "notes": "Strong first pass."},
+            content_type="application/json",
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertTrue(updated.json()["is_starred"])
+        self.assertEqual(updated.json()["tags"], ["keeper"])
+        self.assertEqual(updated.json()["notes"], "Strong first pass.")
+
+        starred_listing = self.client.get(f"/api/v1/screens/?workspace_id={self.workspace.id}&starred_only=true")
+        self.assertEqual(starred_listing.status_code, 200)
+        self.assertEqual(starred_listing.json()["count"], 1)
+
     def test_results_exclusions_and_export_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with override_settings(ARTIFACT_STORAGE_ROOT=temp_dir):

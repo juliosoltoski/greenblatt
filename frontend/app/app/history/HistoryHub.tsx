@@ -10,11 +10,14 @@ import {
   getCurrentUser,
   listBacktests,
   listScreens,
+  updateBacktestRun,
+  updateScreenRun,
   type BacktestRun,
   type CurrentUser,
   type JobRunState,
   type ScreenRun,
 } from "@/lib/api";
+import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -29,10 +32,24 @@ export function HistoryHub() {
   const [backtestCount, setBacktestCount] = useState(0);
   const [backtestPage, setBacktestPage] = useState(1);
   const [jobState, setJobState] = useState<JobRunState | "">("");
+  const [starredOnly, setStarredOnly] = useState(false);
   const [selectedScreenIds, setSelectedScreenIds] = useState<number[]>([]);
   const [selectedBacktestIds, setSelectedBacktestIds] = useState<number[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const preference = readViewPreference<{ jobState: JobRunState | ""; starredOnly: boolean }>("history-hub", {
+      jobState: "",
+      starredOnly: false,
+    });
+    setJobState(preference.jobState);
+    setStarredOnly(preference.starredOnly);
+  }, []);
+
+  useEffect(() => {
+    writeViewPreference("history-hub", { jobState, starredOnly });
+  }, [jobState, starredOnly]);
 
   useEffect(() => {
     let active = true;
@@ -42,8 +59,8 @@ export function HistoryHub() {
         const currentUser = await getCurrentUser();
         const workspaceId = currentUser.active_workspace?.id;
         const [screenPayload, backtestPayload] = await Promise.all([
-          listScreens(workspaceId, { page: screenPage, pageSize: 10, jobState }),
-          listBacktests(workspaceId, { page: backtestPage, pageSize: 10, jobState }),
+          listScreens(workspaceId, { page: screenPage, pageSize: 10, jobState, starredOnly }),
+          listBacktests(workspaceId, { page: backtestPage, pageSize: 10, jobState, starredOnly }),
         ]);
         if (!active) {
           return;
@@ -74,7 +91,7 @@ export function HistoryHub() {
     return () => {
       active = false;
     };
-  }, [backtestPage, jobState, router, screenPage]);
+  }, [backtestPage, jobState, router, screenPage, starredOnly]);
 
   const screenPageCount = Math.max(1, Math.ceil(screenCount / 10));
   const backtestPageCount = Math.max(1, Math.ceil(backtestCount / 10));
@@ -108,6 +125,29 @@ export function HistoryHub() {
       });
     } catch (templateError) {
       setError(formatApiError(templateError, "Unable to save this run as a template."));
+    }
+  }
+
+  async function handleToggleStar(kind: "screen" | "backtest", run: ScreenRun | BacktestRun) {
+    try {
+      if (kind === "screen") {
+        await updateScreenRun(run.id, { isStarred: !run.is_starred });
+      } else {
+        await updateBacktestRun(run.id, { isStarred: !run.is_starred });
+      }
+      const workspaceId = user?.active_workspace?.id;
+      if (workspaceId) {
+        const [screenPayload, backtestPayload] = await Promise.all([
+          listScreens(workspaceId, { page: screenPage, pageSize: 10, jobState, starredOnly }),
+          listBacktests(workspaceId, { page: backtestPage, pageSize: 10, jobState, starredOnly }),
+        ]);
+        setScreens(screenPayload.results);
+        setScreenCount(screenPayload.count);
+        setBacktests(backtestPayload.results);
+        setBacktestCount(backtestPayload.count);
+      }
+    } catch (updateError) {
+      setError(formatApiError(updateError, "Unable to update the run bookmark."));
     }
   }
 
@@ -182,6 +222,10 @@ export function HistoryHub() {
               <option value="partial_failed">Partial failed</option>
             </select>
           </label>
+          <label style={checkboxFieldStyle}>
+            <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+            <span>Starred runs only</span>
+          </label>
         </div>
 
         <div style={layoutStyle}>
@@ -218,10 +262,14 @@ export function HistoryHub() {
                         <strong>Screen #{screen.id}</strong>
                         <div style={metaStyle}>{screen.universe.name}</div>
                         <div style={subtleMetaStyle}>{screen.created_at}</div>
+                        {screen.tags.length > 0 ? <div style={tagRowStyle}>{screen.tags.map((tag) => <span key={tag} style={tagStyle}>{tag}</span>)}</div> : null}
                       </div>
                       <span style={stateBadgeStyle(screen.job.state)}>{screen.job.state.replaceAll("_", " ")}</span>
                     </div>
                     <div style={actionRowStyle}>
+                      <button type="button" style={ghostButtonStyle} onClick={() => void handleToggleStar("screen", screen)}>
+                        {screen.is_starred ? "Unstar" : "Star"}
+                      </button>
                       <Link href={`/app/screens/${screen.id}`} style={ghostLinkStyle}>
                         Open
                       </Link>
@@ -285,10 +333,14 @@ export function HistoryHub() {
                         <strong>Backtest #{backtest.id}</strong>
                         <div style={metaStyle}>{backtest.universe.name}</div>
                         <div style={subtleMetaStyle}>{backtest.start_date} to {backtest.end_date}</div>
+                        {backtest.tags.length > 0 ? <div style={tagRowStyle}>{backtest.tags.map((tag) => <span key={tag} style={tagStyle}>{tag}</span>)}</div> : null}
                       </div>
                       <span style={stateBadgeStyle(backtest.job.state)}>{backtest.job.state.replaceAll("_", " ")}</span>
                     </div>
                     <div style={actionRowStyle}>
+                      <button type="button" style={ghostButtonStyle} onClick={() => void handleToggleStar("backtest", backtest)}>
+                        {backtest.is_starred ? "Unstar" : "Star"}
+                      </button>
                       <Link href={`/app/backtests/${backtest.id}`} style={ghostLinkStyle}>
                         Open
                       </Link>
@@ -452,6 +504,16 @@ const fieldStyle: CSSProperties = {
   gap: "0.4rem",
 };
 
+const checkboxFieldStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.55rem",
+  padding: "0.85rem 1rem",
+  borderRadius: "14px",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  background: "#fff",
+};
+
 const labelStyle: CSSProperties = {
   fontSize: "0.92rem",
   color: "#334862",
@@ -547,6 +609,21 @@ const subtleMetaStyle: CSSProperties = {
   lineHeight: 1.5,
 };
 
+const tagRowStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.45rem",
+  marginTop: "0.45rem",
+};
+
+const tagStyle: CSSProperties = {
+  padding: "0.3rem 0.55rem",
+  borderRadius: "999px",
+  background: "#eef4fb",
+  color: "#203247",
+  fontSize: "0.82rem",
+};
+
 const pillStyle: CSSProperties = {
   alignSelf: "flex-start",
   padding: "0.45rem 0.75rem",
@@ -554,4 +631,3 @@ const pillStyle: CSSProperties = {
   background: "#dde6f0",
   color: "#162132",
 };
-

@@ -1,28 +1,59 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type SVGProps } from "react";
+import { startTransition, useEffect, useState, type CSSProperties, type FormEvent, type SVGProps } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
   ApiError,
+  createStrategyTemplate,
   getBacktestRun,
   getCurrentUser,
   listBacktestEquityPoints,
   listBacktestFinalHoldings,
   listBacktestReviewTargets,
   listBacktestTrades,
+  updateBacktestRun,
   type BacktestEquityPoint,
   type BacktestFinalHolding,
   type BacktestReviewTarget,
   type BacktestRun,
   type BacktestTrade,
 } from "@/lib/api";
+import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
 
 type BacktestRunDetailViewProps = {
   backtestRunId: number;
+};
+
+type BacktestDetailPreference = {
+  tradePageSize: number;
+  tradeSort: string;
+  tradeDirection: "asc" | "desc";
+  reviewTargetPageSize: number;
+  reviewTargetSort: string;
+  reviewTargetDirection: "asc" | "desc";
+  holdingSort: string;
+  holdingDirection: "asc" | "desc";
+  showBenchmark: boolean;
+  showTradeReason: boolean;
+  showReviewCompany: boolean;
+};
+
+const DEFAULT_DETAIL_PREFERENCE: BacktestDetailPreference = {
+  tradePageSize: 25,
+  tradeSort: "position",
+  tradeDirection: "asc",
+  reviewTargetPageSize: 25,
+  reviewTargetSort: "position",
+  reviewTargetDirection: "asc",
+  holdingSort: "position",
+  holdingDirection: "asc",
+  showBenchmark: true,
+  showTradeReason: true,
+  showReviewCompany: true,
 };
 
 
@@ -37,17 +68,68 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
   const [finalHoldings, setFinalHoldings] = useState<BacktestFinalHolding[]>([]);
   const [finalHoldingCount, setFinalHoldingCount] = useState(0);
   const [tradePage, setTradePage] = useState(1);
-  const [tradePageSize, setTradePageSize] = useState(25);
-  const [tradeSort, setTradeSort] = useState("position");
-  const [tradeDirection, setTradeDirection] = useState<"asc" | "desc">("asc");
+  const [tradePageSize, setTradePageSize] = useState(DEFAULT_DETAIL_PREFERENCE.tradePageSize);
+  const [tradeSort, setTradeSort] = useState(DEFAULT_DETAIL_PREFERENCE.tradeSort);
+  const [tradeDirection, setTradeDirection] = useState<"asc" | "desc">(DEFAULT_DETAIL_PREFERENCE.tradeDirection);
   const [reviewTargetPage, setReviewTargetPage] = useState(1);
-  const [reviewTargetPageSize, setReviewTargetPageSize] = useState(25);
-  const [reviewTargetSort, setReviewTargetSort] = useState("position");
-  const [reviewTargetDirection, setReviewTargetDirection] = useState<"asc" | "desc">("asc");
-  const [holdingSort, setHoldingSort] = useState("position");
-  const [holdingDirection, setHoldingDirection] = useState<"asc" | "desc">("asc");
+  const [reviewTargetPageSize, setReviewTargetPageSize] = useState(DEFAULT_DETAIL_PREFERENCE.reviewTargetPageSize);
+  const [reviewTargetSort, setReviewTargetSort] = useState(DEFAULT_DETAIL_PREFERENCE.reviewTargetSort);
+  const [reviewTargetDirection, setReviewTargetDirection] = useState<"asc" | "desc">(DEFAULT_DETAIL_PREFERENCE.reviewTargetDirection);
+  const [holdingSort, setHoldingSort] = useState(DEFAULT_DETAIL_PREFERENCE.holdingSort);
+  const [holdingDirection, setHoldingDirection] = useState<"asc" | "desc">(DEFAULT_DETAIL_PREFERENCE.holdingDirection);
+  const [showBenchmark, setShowBenchmark] = useState(DEFAULT_DETAIL_PREFERENCE.showBenchmark);
+  const [showTradeReason, setShowTradeReason] = useState(DEFAULT_DETAIL_PREFERENCE.showTradeReason);
+  const [showReviewCompany, setShowReviewCompany] = useState(DEFAULT_DETAIL_PREFERENCE.showReviewCompany);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [isStarred, setIsStarred] = useState(false);
+  const [tagsText, setTagsText] = useState("");
+  const [notes, setNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+
+  useEffect(() => {
+    const preference = readViewPreference<BacktestDetailPreference>("backtest-run-detail", DEFAULT_DETAIL_PREFERENCE);
+    setTradePageSize(preference.tradePageSize);
+    setTradeSort(preference.tradeSort);
+    setTradeDirection(preference.tradeDirection);
+    setReviewTargetPageSize(preference.reviewTargetPageSize);
+    setReviewTargetSort(preference.reviewTargetSort);
+    setReviewTargetDirection(preference.reviewTargetDirection);
+    setHoldingSort(preference.holdingSort);
+    setHoldingDirection(preference.holdingDirection);
+    setShowBenchmark(preference.showBenchmark);
+    setShowTradeReason(preference.showTradeReason);
+    setShowReviewCompany(preference.showReviewCompany);
+  }, []);
+
+  useEffect(() => {
+    writeViewPreference("backtest-run-detail", {
+      tradePageSize,
+      tradeSort,
+      tradeDirection,
+      reviewTargetPageSize,
+      reviewTargetSort,
+      reviewTargetDirection,
+      holdingSort,
+      holdingDirection,
+      showBenchmark,
+      showTradeReason,
+      showReviewCompany,
+    });
+  }, [
+    holdingDirection,
+    holdingSort,
+    reviewTargetDirection,
+    reviewTargetPageSize,
+    reviewTargetSort,
+    showBenchmark,
+    showReviewCompany,
+    showTradeReason,
+    tradeDirection,
+    tradePageSize,
+    tradeSort,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -70,7 +152,7 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
         if (!active) {
           return;
         }
-        applyPayloads(payloads);
+        applyPayloads(payloads, true);
         setState("ready");
       } catch (loadError) {
         if (!active) {
@@ -135,13 +217,13 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
         holdingSort,
         holdingDirection,
       });
-      applyPayloads(payloads);
+      applyPayloads(payloads, false);
     } catch (refreshError) {
       setError(formatApiError(refreshError, "Unable to refresh the backtest run."));
     }
   }
 
-  function applyPayloads(payloads: Awaited<ReturnType<typeof loadDetailPayloads>>) {
+  function applyPayloads(payloads: Awaited<ReturnType<typeof loadDetailPayloads>>, syncAnnotations: boolean) {
     setBacktestRun(payloads.run);
     setEquityPoints(payloads.equity.results);
     setTrades(payloads.trades.results);
@@ -150,6 +232,61 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
     setReviewTargetCount(payloads.reviewTargets.count);
     setFinalHoldings(payloads.finalHoldings.results);
     setFinalHoldingCount(payloads.finalHoldings.count);
+    if (syncAnnotations) {
+      setIsStarred(payloads.run.is_starred);
+      setTagsText(payloads.run.tags.join(", "));
+      setNotes(payloads.run.notes);
+    }
+  }
+
+  async function handleSaveAnnotations(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      const updated = await updateBacktestRun(backtestRunId, {
+        isStarred,
+        tags: splitTags(tagsText),
+        notes,
+      });
+      setBacktestRun(updated);
+      setIsStarred(updated.is_starred);
+      setTagsText(updated.tags.join(", "));
+      setNotes(updated.notes);
+    } catch (saveError) {
+      setError(formatApiError(saveError, "Unable to save the backtest annotations."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handlePromoteToTemplate() {
+    if (backtestRun == null) {
+      return;
+    }
+    const name = window.prompt("Template name", `Backtest run ${backtestRun.id}`);
+    if (name == null || name.trim() === "") {
+      return;
+    }
+    setIsSavingTemplate(true);
+    setError(null);
+    try {
+      await createStrategyTemplate({
+        name: name.trim(),
+        description: backtestRun.notes || `Saved from backtest run #${backtestRun.id}`,
+        sourceBacktestRunId: backtestRun.id,
+        isStarred: backtestRun.is_starred,
+        tags: backtestRun.tags,
+        notes: backtestRun.notes,
+      });
+      startTransition(() => {
+        router.push("/app/templates");
+      });
+    } catch (templateError) {
+      setError(formatApiError(templateError, "Unable to save this backtest as a template."));
+    } finally {
+      setIsSavingTemplate(false);
+    }
   }
 
   if (state === "loading") {
@@ -200,24 +337,18 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
               Universe
             </Link>
             <Link href={`/app/backtests?draft_backtest_run_id=${backtestRun.id}`} style={ghostLinkStyle}>
-              Duplicate as draft
+              Clone as draft
             </Link>
-            <Link href="/app/history" style={ghostLinkStyle}>
-              History
-            </Link>
-            <Link href="/app/templates" style={ghostLinkStyle}>
-              Templates
-            </Link>
-            <Link href="/app/screens" style={ghostLinkStyle}>
-              Screens
-            </Link>
+            <button type="button" style={primaryLinkButtonStyle} onClick={() => void handlePromoteToTemplate()} disabled={isSavingTemplate}>
+              {isSavingTemplate ? "Saving..." : "Promote to template"}
+            </button>
           </div>
         </div>
 
         <p style={bodyStyle}>
           Workspace: <strong>{backtestRun.workspace.name}</strong>. The full equity curve, trades,
-          review targets, and final holdings are persisted, so the result remains inspectable after
-          refresh or re-login.
+          review targets, and final holdings are persisted, and this page now remembers your table
+          preferences so repeated review work is lighter.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -250,6 +381,59 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
           />
           <SummaryCard label="Trades" value={String(backtestRun.trade_count)} detail={`${backtestRun.review_target_count} review targets`} />
           <SummaryCard label="Export" value={backtestRun.export?.filename ?? "Pending"} detail={backtestRun.export ? "Artifact ready" : "Available when complete"} />
+          <SummaryCard label="Research status" value={backtestRun.is_starred ? "Starred" : "Standard"} detail={backtestRun.tags.length > 0 ? backtestRun.tags.join(", ") : "No tags yet"} />
+        </div>
+
+        <div style={detailGridStyle}>
+          <section style={sectionCardStyle}>
+            <div style={tableHeaderStyle}>
+              <div>
+                <p style={sectionLabelStyle}>Research notes</p>
+                <h2 style={tableTitleStyle}>Bookmark and annotate</h2>
+              </div>
+              {backtestRun.is_starred ? <span style={starPillStyle}>Starred</span> : null}
+            </div>
+            <form onSubmit={handleSaveAnnotations} style={formStyle}>
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Tags</span>
+                <input
+                  type="text"
+                  value={tagsText}
+                  onChange={(event) => setTagsText(event.target.value)}
+                  placeholder="benchmark, review, keeper"
+                  style={inputStyle}
+                />
+              </label>
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Notes</span>
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={6} style={textareaStyle} />
+              </label>
+              <label style={checkboxFieldStyle}>
+                <input type="checkbox" checked={isStarred} onChange={(event) => setIsStarred(event.target.checked)} />
+                <span>Star this backtest so it stays easy to find in history</span>
+              </label>
+              <button type="submit" style={primaryButtonStyle} disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save annotations"}
+              </button>
+            </form>
+          </section>
+
+          <section style={sectionCardStyle}>
+            <div style={tableHeaderStyle}>
+              <div>
+                <p style={sectionLabelStyle}>Artifacts</p>
+                <h2 style={tableTitleStyle}>{backtestRun.artifacts.length} available</h2>
+              </div>
+            </div>
+            <div style={artifactListStyle}>
+              {backtestRun.artifacts.map((artifact) => (
+                <a key={artifact.download_url} href={artifact.download_url} style={artifactLinkStyle}>
+                  <strong>{artifact.label}</strong>
+                  <span style={metaStyle}>{artifact.filename}</span>
+                </a>
+              ))}
+            </div>
+          </section>
         </div>
 
         <div style={chartCardStyle}>
@@ -258,11 +442,10 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
               <p style={sectionLabelStyle}>Equity curve</p>
               <h2 style={tableTitleStyle}>{equityPoints.length.toLocaleString()} points</h2>
             </div>
-            {backtestRun.export ? (
-              <a href={backtestRun.export.download_url} style={primaryLinkStyle}>
-                Download artifacts
-              </a>
-            ) : null}
+            <label style={toggleStyle}>
+              <input type="checkbox" checked={showBenchmark} onChange={(event) => setShowBenchmark(event.target.checked)} />
+              <span>Show benchmark</span>
+            </label>
           </div>
           {chartData == null ? (
             <p style={bodyStyle}>
@@ -270,10 +453,10 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
             </p>
           ) : (
             <div style={{ display: "grid", gap: "0.85rem" }}>
-              <EquityCurveChart data={chartData} />
+              <EquityCurveChart data={chartData} showBenchmark={showBenchmark} />
               <div style={legendStyle}>
                 <span style={legendItemStyle}><span style={{ ...legendLineStyle, background: "#162132" }} />Strategy</span>
-                {chartData.hasBenchmark ? (
+                {chartData.hasBenchmark && showBenchmark ? (
                   <span style={legendItemStyle}><span style={{ ...legendLineStyle, background: "#5d8dc0" }} />Benchmark</span>
                 ) : null}
               </div>
@@ -302,10 +485,34 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
                   <option value="asc">Ascending</option>
                   <option value="desc">Descending</option>
                 </select>
+                <select
+                  value={tradePageSize}
+                  onChange={(event) => {
+                    setTradePage(1);
+                    setTradePageSize(Number(event.target.value));
+                  }}
+                  style={compactInputStyle}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                <label style={toggleStyle}>
+                  <input type="checkbox" checked={showTradeReason} onChange={(event) => setShowTradeReason(event.target.checked)} />
+                  <span>Reason</span>
+                </label>
               </div>
             </div>
             <DataTable
-              headers={["Date", "Ticker", "Side", "Shares", "Price", "Proceeds", "Reason"]}
+              headers={[
+                "Date",
+                "Ticker",
+                "Side",
+                "Shares",
+                "Price",
+                "Proceeds",
+                ...(showTradeReason ? ["Reason"] : []),
+              ]}
               rows={trades.map((trade) => [
                 trade.date,
                 trade.ticker,
@@ -313,8 +520,9 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
                 formatNumber(trade.shares),
                 formatCurrency(trade.price),
                 formatCurrency(trade.proceeds),
-                trade.reason,
+                ...(showTradeReason ? [trade.reason] : []),
               ])}
+              tickerColumnIndex={1}
               emptyMessage={backtestRun.job.is_terminal ? "No trades were persisted." : "Trades will appear once the run finishes."}
             />
             <div style={paginationStyle}>
@@ -350,18 +558,35 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
                   <option value="asc">Ascending</option>
                   <option value="desc">Descending</option>
                 </select>
+                <select
+                  value={reviewTargetPageSize}
+                  onChange={(event) => {
+                    setReviewTargetPage(1);
+                    setReviewTargetPageSize(Number(event.target.value));
+                  }}
+                  style={compactInputStyle}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                <label style={toggleStyle}>
+                  <input type="checkbox" checked={showReviewCompany} onChange={(event) => setShowReviewCompany(event.target.checked)} />
+                  <span>Company</span>
+                </label>
               </div>
             </div>
             <DataTable
-              headers={["Date", "Rank", "Ticker", "Company", "Final", "Composite"]}
+              headers={["Date", "Rank", "Ticker", ...(showReviewCompany ? ["Company"] : []), "Final", "Composite"]}
               rows={reviewTargets.map((target) => [
                 target.date,
                 String(target.target_rank),
                 target.ticker,
-                target.company_name ?? "-",
+                ...(showReviewCompany ? [target.company_name ?? "-"] : []),
                 target.final_score == null ? "-" : String(target.final_score),
                 target.composite_score == null ? "-" : String(target.composite_score),
               ])}
+              tickerColumnIndex={2}
               emptyMessage={backtestRun.job.is_terminal ? "No review targets were persisted." : "Review targets will appear once the run finishes."}
             />
             <div style={paginationStyle}>
@@ -411,6 +636,7 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
               formatCurrency(holding.entry_price),
               holding.score == null ? "-" : String(holding.score),
             ])}
+            tickerColumnIndex={0}
             emptyMessage={backtestRun.job.is_terminal ? "No final holdings were persisted." : "Final holdings will appear once the run finishes."}
           />
         </section>
@@ -499,15 +725,17 @@ function buildChartSeries(points: BacktestEquityPoint[]) {
 
 function EquityCurveChart({
   data,
+  showBenchmark,
 }: {
   data: NonNullable<ReturnType<typeof buildChartSeries>>;
+  showBenchmark: boolean;
 }) {
   return (
     <svg viewBox={`0 0 ${data.width} ${data.height}`} style={chartStyle}>
       <line x1="24" y1={data.height - 24} x2={data.width - 24} y2={data.height - 24} stroke="#c4d2e0" strokeWidth="1" />
       <line x1="24" y1="24" x2="24" y2={data.height - 24} stroke="#c4d2e0" strokeWidth="1" />
       <polyline fill="none" stroke="#162132" strokeWidth="3" points={data.equityPath} />
-      {data.hasBenchmark ? <polyline fill="none" stroke="#5d8dc0" strokeWidth="2.5" strokeDasharray="8 6" points={data.benchmarkPath} /> : null}
+      {data.hasBenchmark && showBenchmark ? <polyline fill="none" stroke="#5d8dc0" strokeWidth="2.5" strokeDasharray="8 6" points={data.benchmarkPath} /> : null}
       <ChartLabel x={24} y={20} text={formatCurrency(data.maxValue)} />
       <ChartLabel x={24} y={data.height - 4} text={formatCurrency(data.minValue)} />
       <ChartLabel x={24} y={data.height - 6} text={data.firstDate} align="start" />
@@ -537,10 +765,12 @@ function ChartLabel({
 function DataTable({
   headers,
   rows,
+  tickerColumnIndex,
   emptyMessage,
 }: {
   headers: string[];
   rows: string[][];
+  tickerColumnIndex: number;
   emptyMessage: string;
 }) {
   return (
@@ -566,7 +796,7 @@ function DataTable({
             rows.map((row, index) => (
               <tr key={`${row[0]}-${index}`}>
                 {row.map((value, valueIndex) => (
-                  <td key={`${valueIndex}-${value}`} style={valueIndex === 1 ? tickerCellStyle : cellStyle}>
+                  <td key={`${valueIndex}-${value}`} style={valueIndex === tickerColumnIndex ? tickerCellStyle : cellStyle}>
                     {value}
                   </td>
                 ))}
@@ -587,6 +817,13 @@ function SummaryCard({ label, value, detail }: { label: string; value: string; d
       <p style={metaStyle}>{detail}</p>
     </div>
   );
+}
+
+function splitTags(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function formatApiError(error: unknown, fallback: string): string {
@@ -708,6 +945,13 @@ const summaryGridStyle: CSSProperties = {
   marginTop: "1.5rem",
 };
 
+const detailGridStyle: CSSProperties = {
+  display: "grid",
+  gap: "1rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  marginTop: "1.5rem",
+};
+
 const summaryCardStyle: CSSProperties = {
   padding: "1.1rem",
   borderRadius: "20px",
@@ -782,11 +1026,63 @@ const toolbarStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
+const formStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.85rem",
+  marginTop: "1rem",
+};
+
+const fieldStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.45rem",
+};
+
+const labelStyle: CSSProperties = {
+  fontSize: "0.92rem",
+  color: "#334862",
+};
+
+const inputStyle: CSSProperties = {
+  width: "100%",
+  borderRadius: "14px",
+  border: "1px solid rgba(73, 98, 128, 0.25)",
+  padding: "0.85rem 0.95rem",
+  fontSize: "0.98rem",
+  background: "#fff",
+};
+
+const textareaStyle: CSSProperties = {
+  ...inputStyle,
+  resize: "vertical",
+  minHeight: "7rem",
+};
+
 const compactInputStyle: CSSProperties = {
   borderRadius: "12px",
   border: "1px solid rgba(73, 98, 128, 0.25)",
   padding: "0.7rem 0.8rem",
   background: "#fff",
+};
+
+const checkboxFieldStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.55rem",
+  padding: "0.9rem 1rem",
+  borderRadius: "14px",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  background: "#fff",
+};
+
+const toggleStyle: CSSProperties = {
+  display: "inline-flex",
+  gap: "0.4rem",
+  alignItems: "center",
+  padding: "0.65rem 0.8rem",
+  borderRadius: "12px",
+  background: "#fff",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  color: "#334862",
 };
 
 const tableWrapperStyle: CSSProperties = {
@@ -846,6 +1142,15 @@ const ghostButtonStyle: CSSProperties = {
   cursor: "pointer",
 };
 
+const primaryButtonStyle: CSSProperties = {
+  border: 0,
+  borderRadius: "999px",
+  padding: "0.85rem 1rem",
+  background: "#162132",
+  color: "#f5f7fb",
+  cursor: "pointer",
+};
+
 const primaryLinkStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -855,6 +1160,18 @@ const primaryLinkStyle: CSSProperties = {
   background: "#162132",
   color: "#f5f7fb",
   textDecoration: "none",
+};
+
+const primaryLinkButtonStyle: CSSProperties = {
+  border: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "999px",
+  padding: "0.8rem 1rem",
+  background: "#162132",
+  color: "#f5f7fb",
+  cursor: "pointer",
 };
 
 const ghostLinkStyle: CSSProperties = {
@@ -923,4 +1240,29 @@ const metaStyle: CSSProperties = {
   margin: 0,
   color: "#496280",
   lineHeight: 1.5,
+};
+
+const artifactListStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.75rem",
+  marginTop: "1rem",
+};
+
+const artifactLinkStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.25rem",
+  padding: "0.95rem 1rem",
+  borderRadius: "16px",
+  background: "#fff",
+  border: "1px solid rgba(73, 98, 128, 0.15)",
+  color: "#162132",
+  textDecoration: "none",
+};
+
+const starPillStyle: CSSProperties = {
+  padding: "0.25rem 0.55rem",
+  borderRadius: "999px",
+  background: "#fff4cc",
+  color: "#8b5c00",
+  fontSize: "0.82rem",
 };

@@ -14,18 +14,33 @@ import {
   type CurrentUser,
   type StrategyTemplate,
 } from "@/lib/api";
+import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
-
+type WorkflowFilter = "all" | "screen" | "backtest";
 
 export function TemplateHub() {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [templates, setTemplates] = useState<StrategyTemplate[]>([]);
-  const [workflowFilter, setWorkflowFilter] = useState<"all" | "screen" | "backtest">("all");
+  const [workflowFilter, setWorkflowFilter] = useState<WorkflowFilter>("all");
+  const [starredOnly, setStarredOnly] = useState(false);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [isLaunchingId, setIsLaunchingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const preference = readViewPreference<{ workflowFilter: WorkflowFilter; starredOnly: boolean }>("template-hub", {
+      workflowFilter: "all",
+      starredOnly: false,
+    });
+    setWorkflowFilter(preference.workflowFilter);
+    setStarredOnly(preference.starredOnly);
+  }, []);
+
+  useEffect(() => {
+    writeViewPreference("template-hub", { workflowFilter, starredOnly });
+  }, [starredOnly, workflowFilter]);
 
   useEffect(() => {
     let active = true;
@@ -36,6 +51,7 @@ export function TemplateHub() {
         const payload = await listStrategyTemplates({
           workspaceId: currentUser.active_workspace?.id,
           workflowKind: workflowFilter === "all" ? undefined : workflowFilter,
+          starredOnly,
           pageSize: 50,
         });
         if (!active) {
@@ -64,12 +80,13 @@ export function TemplateHub() {
     return () => {
       active = false;
     };
-  }, [router, workflowFilter]);
+  }, [router, starredOnly, workflowFilter]);
 
   async function refreshTemplates(currentUser: CurrentUser) {
     const payload = await listStrategyTemplates({
       workspaceId: currentUser.active_workspace?.id,
       workflowKind: workflowFilter === "all" ? undefined : workflowFilter,
+      starredOnly,
       pageSize: 50,
     });
     setTemplates(payload.results);
@@ -104,16 +121,31 @@ export function TemplateHub() {
       return;
     }
     const nextDescription = window.prompt("Template description", template.description) ?? template.description;
+    const nextTags = window.prompt("Template tags (comma separated)", template.tags.join(", ")) ?? template.tags.join(", ");
+    const nextNotes = window.prompt("Template notes", template.notes) ?? template.notes;
     try {
       await updateStrategyTemplate(template.id, {
         name: nextName.trim(),
         description: nextDescription.trim(),
+        tags: splitTags(nextTags),
+        notes: nextNotes.trim(),
       });
       if (user) {
         await refreshTemplates(user);
       }
     } catch (updateError) {
       setError(formatApiError(updateError, "Unable to update this template."));
+    }
+  }
+
+  async function handleToggleStar(template: StrategyTemplate) {
+    try {
+      await updateStrategyTemplate(template.id, { isStarred: !template.is_starred });
+      if (user) {
+        await refreshTemplates(user);
+      }
+    } catch (updateError) {
+      setError(formatApiError(updateError, "Unable to update the template bookmark."));
     }
   }
 
@@ -162,12 +194,12 @@ export function TemplateHub() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M7 Templates</p>
-            <h1 style={titleStyle}>Reusable screen and backtest templates</h1>
+            <p style={eyebrowStyle}>Templates</p>
+            <h1 style={titleStyle}>Reusable research setups</h1>
           </div>
           <div style={actionRowStyle}>
             <Link href="/app" style={ghostLinkStyle}>
-              App shell
+              Dashboard
             </Link>
             <Link href="/app/history" style={ghostLinkStyle}>
               History
@@ -176,8 +208,8 @@ export function TemplateHub() {
         </div>
 
         <p style={bodyStyle}>
-          Save templates from prior runs, then use them as a draft or launch them directly without
-          re-entering the full configuration.
+          Save strong screens and backtests as templates, bookmark the important ones, and keep a
+          few notes so future reruns do not start from zero context.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -187,7 +219,7 @@ export function TemplateHub() {
             <span style={labelStyle}>Workflow</span>
             <select
               value={workflowFilter}
-              onChange={(event) => setWorkflowFilter(event.target.value as "all" | "screen" | "backtest")}
+              onChange={(event) => setWorkflowFilter(event.target.value as WorkflowFilter)}
               style={inputStyle}
             >
               <option value="all">All</option>
@@ -195,15 +227,19 @@ export function TemplateHub() {
               <option value="backtest">Backtests</option>
             </select>
           </label>
+          <label style={checkboxFieldStyle}>
+            <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+            <span>Starred templates only</span>
+          </label>
           <div style={noteStyle}>
-            New templates are created from the history page.
+            Create new templates from history or directly from run detail pages.
           </div>
         </div>
 
         <div style={listStyle}>
           {templates.length === 0 ? (
             <section style={cardStyle}>
-              <p style={bodyStyle}>No templates have been saved yet.</p>
+              <p style={bodyStyle}>No templates match the current view.</p>
               <Link href="/app/history" style={primaryLinkStyle}>
                 Open history
               </Link>
@@ -213,15 +249,33 @@ export function TemplateHub() {
               <section key={template.id} style={cardStyle}>
                 <div style={cardHeaderStyle}>
                   <div>
-                    <p style={sectionLabelStyle}>{template.workflow_kind}</p>
+                    <div style={titleRowStyle}>
+                      <p style={sectionLabelStyle}>{template.workflow_kind}</p>
+                      {template.is_starred ? <span style={starPillStyle}>Starred</span> : null}
+                    </div>
                     <h2 style={cardTitleStyle}>{template.name}</h2>
                     <p style={metaStyle}>{template.universe.name}</p>
                   </div>
                   <span style={pillStyle}>{template.last_used_at ? "Used" : "New"}</span>
                 </div>
                 <p style={bodyStyle}>{template.description || "No description provided."}</p>
+                {template.tags.length > 0 ? (
+                  <div style={tagRowStyle}>
+                    {template.tags.map((tag) => (
+                      <span key={tag} style={tagStyle}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {template.notes ? <p style={noteBlockStyle}>{template.notes}</p> : null}
                 <p style={metaStyle}>
-                  Source: {template.source_screen_run_id ? `screen #${template.source_screen_run_id}` : template.source_backtest_run_id ? `backtest #${template.source_backtest_run_id}` : "manual"}
+                  Source:{" "}
+                  {template.source_screen_run_id
+                    ? `screen #${template.source_screen_run_id}`
+                    : template.source_backtest_run_id
+                      ? `backtest #${template.source_backtest_run_id}`
+                      : "manual"}
                 </p>
                 <div style={actionRowStyle}>
                   <Link
@@ -242,6 +296,9 @@ export function TemplateHub() {
                   >
                     {isLaunchingId === template.id ? "Launching..." : "Launch now"}
                   </button>
+                  <button type="button" style={ghostButtonStyle} onClick={() => void handleToggleStar(template)}>
+                    {template.is_starred ? "Unstar" : "Star"}
+                  </button>
                   <button type="button" style={ghostButtonStyle} onClick={() => void handleEdit(template)}>
                     Edit
                   </button>
@@ -256,6 +313,13 @@ export function TemplateHub() {
       </section>
     </main>
   );
+}
+
+function splitTags(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function formatApiError(error: unknown, fallback: string): string {
@@ -323,6 +387,13 @@ const cardHeaderStyle: CSSProperties = {
   alignItems: "flex-start",
 };
 
+const titleRowStyle: CSSProperties = {
+  display: "flex",
+  gap: "0.55rem",
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
 const cardTitleStyle: CSSProperties = {
   margin: "0.35rem 0 0",
   fontSize: "1.5rem",
@@ -331,6 +402,16 @@ const cardTitleStyle: CSSProperties = {
 const fieldStyle: CSSProperties = {
   display: "grid",
   gap: "0.4rem",
+};
+
+const checkboxFieldStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.55rem",
+  padding: "0.85rem 1rem",
+  borderRadius: "14px",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  background: "#fff",
 };
 
 const labelStyle: CSSProperties = {
@@ -441,10 +522,44 @@ const pillStyle: CSSProperties = {
   color: "#162132",
 };
 
+const starPillStyle: CSSProperties = {
+  padding: "0.22rem 0.5rem",
+  borderRadius: "999px",
+  background: "#fff4cc",
+  color: "#8b5c00",
+  fontSize: "0.8rem",
+};
+
 const noteStyle: CSSProperties = {
   padding: "0.9rem 1rem",
   borderRadius: "16px",
   background: "#f8fbff",
   border: "1px solid rgba(73, 98, 128, 0.18)",
   color: "#496280",
+};
+
+const noteBlockStyle: CSSProperties = {
+  margin: "0.75rem 0 0",
+  padding: "0.85rem 0.95rem",
+  borderRadius: "16px",
+  background: "#fff",
+  border: "1px solid rgba(73, 98, 128, 0.12)",
+  color: "#334862",
+  lineHeight: 1.6,
+  whiteSpace: "pre-wrap",
+};
+
+const tagRowStyle: CSSProperties = {
+  display: "flex",
+  gap: "0.45rem",
+  flexWrap: "wrap",
+  marginTop: "0.75rem",
+};
+
+const tagStyle: CSSProperties = {
+  padding: "0.3rem 0.55rem",
+  borderRadius: "999px",
+  background: "#dde6f0",
+  color: "#334862",
+  fontSize: "0.86rem",
 };

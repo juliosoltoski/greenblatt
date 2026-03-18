@@ -20,6 +20,9 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [isStarred, setIsStarred] = useState(false);
+  const [tagsText, setTagsText] = useState("");
+  const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -36,6 +39,9 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
         setUniverse(payload);
         setName(payload.name);
         setDescription(payload.description);
+        setIsStarred(payload.is_starred);
+        setTagsText(payload.tags.join(", "));
+        setNotes(payload.notes);
         setState("ready");
       } catch (loadError) {
         if (!active) {
@@ -64,10 +70,22 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
     setIsSaving(true);
     setError(null);
     try {
-      const payload = await updateUniverse(universeId, { name, description });
+      const payload = await updateUniverse(universeId, {
+        name,
+        description,
+        isStarred,
+        tags: tagsText
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        notes,
+      });
       setUniverse(payload);
       setName(payload.name);
       setDescription(payload.description);
+      setIsStarred(payload.is_starred);
+      setTagsText(payload.tags.join(", "));
+      setNotes(payload.notes);
     } catch (saveError) {
       setError(formatApiError(saveError, "Unable to update the universe."));
     } finally {
@@ -167,6 +185,11 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
                 : "No uploaded source file"}
             </p>
           </div>
+          <div style={summaryCardStyle}>
+            <p style={sectionLabelStyle}>Research status</p>
+            <h2 style={summaryTitleStyle}>{universe.is_starred ? "Starred" : "Standard"}</h2>
+            <p style={metaStyle}>{universe.tags.length > 0 ? universe.tags.join(", ") : "No tags yet"}</p>
+          </div>
         </div>
 
         <div style={layoutStyle}>
@@ -191,6 +214,29 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
                   rows={4}
                   style={textareaStyle}
                 />
+              </label>
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Tags</span>
+                <input
+                  type="text"
+                  value={tagsText}
+                  onChange={(event) => setTagsText(event.target.value)}
+                  placeholder="starter, review, favorite"
+                  style={inputStyle}
+                />
+              </label>
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Research notes</span>
+                <textarea
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  rows={6}
+                  style={textareaStyle}
+                />
+              </label>
+              <label style={checkboxFieldStyle}>
+                <input type="checkbox" checked={isStarred} onChange={(event) => setIsStarred(event.target.checked)} />
+                <span>Star this universe so it stands out in the dashboard and lists</span>
               </label>
               <div style={actionRowStyle}>
                 <button type="submit" style={buttonStyle} disabled={isSaving}>
@@ -323,6 +369,16 @@ const formStyle: CSSProperties = {
 const fieldStyle: CSSProperties = {
   display: "grid",
   gap: "0.4rem",
+};
+
+const checkboxFieldStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.55rem",
+  padding: "0.9rem 1rem",
+  borderRadius: "14px",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  background: "#fff",
 };
 
 const labelStyle: CSSProperties = {

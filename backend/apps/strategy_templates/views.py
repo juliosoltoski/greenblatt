@@ -96,6 +96,8 @@ class StrategyTemplateListCreateView(MethodScopedThrottleMixin, APIView):
         workflow_kind = serializer.validated_data.get("workflow_kind")
         if workflow_kind:
             queryset = queryset.filter(workflow_kind=workflow_kind)
+        if serializer.validated_data.get("starred_only"):
+            queryset = queryset.filter(is_starred=True)
         paginator, page_obj = _paginate_queryset(
             queryset,
             page=serializer.validated_data["page"],
@@ -152,6 +154,9 @@ class StrategyTemplateListCreateView(MethodScopedThrottleMixin, APIView):
                 workflow_kind=workflow_kind,
                 universe=universe,
                 config=config,
+                is_starred=serializer.validated_data.get("is_starred", False),
+                tags=serializer.validated_data.get("tags", []),
+                notes=serializer.validated_data.get("notes", ""),
                 source_screen_run=source_screen_run,
                 source_backtest_run=source_backtest_run,
             )
@@ -186,6 +191,9 @@ class StrategyTemplateDetailView(MethodScopedThrottleMixin, APIView):
             description=serializer.validated_data.get("description"),
             universe=universe,
             config=serializer.validated_data.get("config"),
+            is_starred=serializer.validated_data.get("is_starred"),
+            tags=serializer.validated_data.get("tags"),
+            notes=serializer.validated_data.get("notes"),
         )
         return Response(serialize_strategy_template(template))
 

@@ -77,3 +77,24 @@ class BacktestRunListSerializer(serializers.Serializer):
     page_size = serializers.IntegerField(required=False, default=20, min_value=1, max_value=100)
     limit = serializers.IntegerField(required=False, min_value=1, max_value=100)
     job_state = serializers.CharField(required=False, allow_blank=True)
+    starred_only = serializers.BooleanField(required=False)
+
+
+class BacktestRunUpdateSerializer(serializers.Serializer):
+    is_starred = serializers.BooleanField(required=False)
+    tags = serializers.ListField(child=serializers.CharField(max_length=50), required=False, allow_empty=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_tags(self, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            cleaned = item.strip()
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            normalized.append(cleaned[:50])
+        return normalized

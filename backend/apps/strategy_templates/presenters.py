@@ -14,6 +14,9 @@ def serialize_strategy_template(template: StrategyTemplate) -> dict[str, object 
         "description": template.description,
         "workflow_kind": template.workflow_kind,
         "universe": serialize_universe(template.universe),
+        "is_starred": template.is_starred,
+        "tags": template.tags,
+        "notes": template.notes,
         "config": template.config,
         "source_screen_run_id": template.source_screen_run_id,
         "source_backtest_run_id": template.source_backtest_run_id,
@@ -21,4 +24,3 @@ def serialize_strategy_template(template: StrategyTemplate) -> dict[str, object 
         "created_at": template.created_at.isoformat(),
         "updated_at": template.updated_at.isoformat(),
     }
-

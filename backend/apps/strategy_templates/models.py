@@ -39,6 +39,9 @@ class StrategyTemplate(models.Model):
         blank=True,
         related_name="saved_templates",
     )
+    is_starred = models.BooleanField(default=False)
+    tags = models.JSONField(default=list, blank=True)
+    notes = models.TextField(blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -52,4 +55,3 @@ class StrategyTemplate(models.Model):
 
     def __str__(self) -> str:
         return self.name
-

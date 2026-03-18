@@ -20,6 +20,10 @@ def _universe_queryset(user):
     )
 
 
+def _is_truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 class UniverseProfileListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -35,6 +39,8 @@ class UniverseListCreateView(APIView):
         workspace_id = request.query_params.get("workspace_id")
         workspace = resolve_workspace_for_request(request.user, int(workspace_id) if workspace_id else None)
         universes = _universe_queryset(request.user).filter(workspace=workspace)
+        if _is_truthy(request.query_params.get("starred_only")):
+            universes = universes.filter(is_starred=True)
         return Response(
             {
                 "workspace_id": workspace.id,
@@ -122,6 +128,9 @@ class UniverseDetailView(APIView):
                 profile_key=serializer.validated_data.get("profile_key"),
                 manual_tickers=serializer.validated_data.get("manual_tickers"),
                 upload_file=serializer.validated_data.get("upload_file"),
+                is_starred=serializer.validated_data.get("is_starred"),
+                tags=serializer.validated_data.get("tags"),
+                notes=serializer.validated_data.get("notes"),
                 provider_name=serializer.validated_data.get("provider_name"),
                 fallback_provider_name=serializer.validated_data.get("fallback_provider_name"),
                 source_changed=source_changed,

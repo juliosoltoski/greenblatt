@@ -17,6 +17,7 @@ import {
   type StrategyTemplate,
   type UniverseSummary,
 } from "@/lib/api";
+import { backtestPresets, getBacktestPresetById, isoDateDaysAgo, isoDateYearsAgo } from "@/lib/workflowPresets";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -31,10 +32,11 @@ function isoDateOffset(daysAgo: number): string {
 type BacktestHubProps = {
   templateId: number | null;
   draftBacktestRunId: number | null;
+  presetId: string | null;
 };
 
 
-export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps) {
+export function BacktestHub({ templateId, draftBacktestRunId, presetId }: BacktestHubProps) {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [universes, setUniverses] = useState<UniverseSummary[]>([]);
@@ -88,6 +90,8 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
             return;
           }
           applyRunDraft(priorRun, universePayload.results);
+        } else if (presetId) {
+          applyPreset(presetId);
         }
         setState("ready");
       } catch (loadError) {
@@ -110,7 +114,7 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
     return () => {
       active = false;
     };
-  }, [draftBacktestRunId, router, templateId]);
+  }, [draftBacktestRunId, presetId, router, templateId]);
 
   useEffect(() => {
     setStartDate((currentValue) => currentValue || isoDateOffset(365 * 2));
@@ -171,6 +175,27 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
     );
     setShowAdvanced(true);
     setDraftNotice(`Draft loaded from backtest #${run.id}`);
+  }
+
+  function applyPreset(nextPresetId: string) {
+    const preset = getBacktestPresetById(nextPresetId);
+    if (preset == null) {
+      return;
+    }
+    setStartDate(isoDateYearsAgo(preset.years));
+    setEndDate(isoDateDaysAgo(1));
+    setInitialCapital(preset.initialCapital);
+    setPortfolioSize(preset.portfolioSize);
+    setReviewFrequency(preset.reviewFrequency);
+    setBenchmark(preset.benchmark);
+    setMomentumMode(preset.momentumMode);
+    setSectorAllowlist((preset.sectorAllowlist ?? []).join(", "));
+    setMinMarketCap(preset.minMarketCap ? String(preset.minMarketCap) : "");
+    setUseCache(preset.useCache ?? true);
+    setRefreshCache(preset.refreshCache ?? false);
+    setCacheTtlHours(preset.cacheTtlHours ?? 24);
+    setShowAdvanced(Boolean(preset.sectorAllowlist?.length || preset.minMarketCap));
+    setDraftNotice(`Preset applied: ${preset.label}`);
   }
 
   function applyBacktestConfig(
@@ -292,6 +317,16 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
     );
   }
 
+  const selectedUniverse = universes.find((universe) => universe.id === selectedUniverseId) ?? null;
+  const launchGuidance = buildBacktestGuidance({
+    universeEntryCount: selectedUniverse?.entry_count ?? 0,
+    portfolioSize,
+    startDate,
+    endDate,
+    refreshCache,
+    useCache,
+  });
+
   return (
     <main style={pageStyle}>
       <section style={panelStyle}>
@@ -315,6 +350,14 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
           <div style={stackStyle}>
             <section style={sectionCardStyle}>
               <p style={sectionLabelStyle}>Launch a backtest</p>
+              <div style={presetGridStyle}>
+                {backtestPresets.map((preset) => (
+                  <button key={preset.id} type="button" style={presetButtonStyle} onClick={() => applyPreset(preset.id)}>
+                    <strong>{preset.label}</strong>
+                    <span style={presetMetaStyle}>{preset.description}</span>
+                  </button>
+                ))}
+              </div>
               {universes.length === 0 ? (
                 <div style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
                   <p style={bodyStyle}>You need a saved universe before you can launch backtests.</p>
@@ -473,6 +516,18 @@ export function BacktestHub({ templateId, draftBacktestRunId }: BacktestHubProps
                       </div>
                     </div>
                   ) : null}
+                  {launchGuidance.length > 0 ? (
+                    <div style={guidanceCardStyle}>
+                      <p style={sectionLabelStyle}>Launch guidance</p>
+                      <div style={guidanceListStyle}>
+                        {launchGuidance.map((item) => (
+                          <p key={item} style={guidanceTextStyle}>
+                            {item}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <button type="submit" style={buttonStyle} disabled={isLaunching}>
                     {isLaunching ? "Launching backtest..." : "Launch backtest"}
                   </button>
@@ -520,6 +575,35 @@ function formatApiError(error: unknown, fallback: string): string {
     return error.errors.length > 0 ? `${error.message} ${error.errors.join(" ")}` : error.message;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function buildBacktestGuidance(payload: {
+  universeEntryCount: number;
+  portfolioSize: number;
+  startDate: string;
+  endDate: string;
+  refreshCache: boolean;
+  useCache: boolean;
+}): string[] {
+  const messages: string[] = [];
+  const start = payload.startDate ? new Date(payload.startDate) : null;
+  const end = payload.endDate ? new Date(payload.endDate) : null;
+  const durationDays =
+    start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())
+      ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000))
+      : 0;
+  if (payload.universeEntryCount > 250 && durationDays > 730) {
+    messages.push("Large universes over long date ranges create heavier backtests and may take longer to finish.");
+  }
+  if (payload.universeEntryCount > 0 && payload.portfolioSize > Math.max(20, Math.floor(payload.universeEntryCount / 2))) {
+    messages.push("A smaller portfolio size is usually easier to interpret when the universe itself is small.");
+  }
+  if (payload.refreshCache) {
+    messages.push("Refreshing cache first improves freshness but usually increases runtime.");
+  } else if (!payload.useCache) {
+    messages.push("Disabling cache will force more live provider calls and can slow repeated backtests.");
+  }
+  return messages;
 }
 
 function stateBadgeStyle(state: BacktestRun["job"]["state"]): CSSProperties {
@@ -586,6 +670,30 @@ const sectionCardStyle: CSSProperties = {
   borderRadius: "22px",
   background: "#f8fbff",
   border: "1px solid rgba(73, 98, 128, 0.18)",
+};
+
+const presetGridStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.75rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  marginTop: "1rem",
+};
+
+const presetButtonStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.25rem",
+  textAlign: "left",
+  padding: "0.9rem 1rem",
+  borderRadius: "16px",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  background: "#fff",
+  color: "#162132",
+  cursor: "pointer",
+};
+
+const presetMetaStyle: CSSProperties = {
+  color: "#5c728d",
+  lineHeight: 1.4,
 };
 
 const sectionLabelStyle: CSSProperties = {
@@ -738,6 +846,26 @@ const advancedBodyStyle: CSSProperties = {
   margin: "0.35rem 0 0",
   lineHeight: 1.5,
   color: "#5c728d",
+};
+
+const guidanceCardStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.55rem",
+  padding: "1rem",
+  borderRadius: "18px",
+  background: "#f5f9fd",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+};
+
+const guidanceListStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.45rem",
+};
+
+const guidanceTextStyle: CSSProperties = {
+  margin: 0,
+  color: "#496280",
+  lineHeight: 1.5,
 };
 
 const statusHeaderStyle: CSSProperties = {

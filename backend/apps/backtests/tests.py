@@ -238,6 +238,20 @@ class BacktestApiTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.json()["id"], payload["id"])
 
+        updated = self.client.patch(
+            f"/api/v1/backtests/{payload['id']}/",
+            data={"is_starred": True, "tags": ["baseline"], "notes": "Retest after provider refresh."},
+            content_type="application/json",
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertTrue(updated.json()["is_starred"])
+        self.assertEqual(updated.json()["tags"], ["baseline"])
+        self.assertEqual(updated.json()["notes"], "Retest after provider refresh.")
+
+        starred_listing = self.client.get(f"/api/v1/backtests/?workspace_id={self.workspace.id}&starred_only=true")
+        self.assertEqual(starred_listing.status_code, 200)
+        self.assertEqual(starred_listing.json()["count"], 1)
+
     def test_child_data_and_export_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with override_settings(ARTIFACT_STORAGE_ROOT=temp_dir):

@@ -1,19 +1,22 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties } from "react";
+import { startTransition, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
   ApiError,
+  createStrategyTemplate,
   getCurrentUser,
   getScreenRun,
   listScreenExclusions,
   listScreenRows,
+  updateScreenRun,
   type ScreenExclusion,
   type ScreenResultRow,
   type ScreenRun,
 } from "@/lib/api";
+import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -21,6 +24,21 @@ type ScreenRunDetailViewProps = {
   screenRunId: number;
 };
 
+type TablePreference = {
+  rowPageSize: number;
+  rowSort: string;
+  rowDirection: "asc" | "desc";
+  showCompany: boolean;
+  showMomentum: boolean;
+};
+
+const DEFAULT_TABLE_PREFERENCE: TablePreference = {
+  rowPageSize: 25,
+  rowSort: "position",
+  rowDirection: "asc",
+  showCompany: true,
+  showMomentum: true,
+};
 
 export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
   const router = useRouter();
@@ -30,12 +48,38 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
   const [rowCount, setRowCount] = useState(0);
   const [exclusionCount, setExclusionCount] = useState(0);
   const [rowPage, setRowPage] = useState(1);
-  const [rowPageSize, setRowPageSize] = useState(25);
-  const [rowSort, setRowSort] = useState("position");
-  const [rowDirection, setRowDirection] = useState<"asc" | "desc">("asc");
+  const [rowPageSize, setRowPageSize] = useState(DEFAULT_TABLE_PREFERENCE.rowPageSize);
+  const [rowSort, setRowSort] = useState(DEFAULT_TABLE_PREFERENCE.rowSort);
+  const [rowDirection, setRowDirection] = useState<"asc" | "desc">(DEFAULT_TABLE_PREFERENCE.rowDirection);
+  const [showCompany, setShowCompany] = useState(DEFAULT_TABLE_PREFERENCE.showCompany);
+  const [showMomentum, setShowMomentum] = useState(DEFAULT_TABLE_PREFERENCE.showMomentum);
   const [exclusionPage, setExclusionPage] = useState(1);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [isStarred, setIsStarred] = useState(false);
+  const [tagsText, setTagsText] = useState("");
+  const [notes, setNotes] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+
+  useEffect(() => {
+    const preference = readViewPreference<TablePreference>("screen-run-detail", DEFAULT_TABLE_PREFERENCE);
+    setRowPageSize(preference.rowPageSize);
+    setRowSort(preference.rowSort);
+    setRowDirection(preference.rowDirection);
+    setShowCompany(preference.showCompany);
+    setShowMomentum(preference.showMomentum);
+  }, []);
+
+  useEffect(() => {
+    writeViewPreference("screen-run-detail", {
+      rowPageSize,
+      rowSort,
+      rowDirection,
+      showCompany,
+      showMomentum,
+    });
+  }, [rowDirection, rowPageSize, rowSort, showCompany, showMomentum]);
 
   useEffect(() => {
     let active = true;
@@ -43,19 +87,17 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
     async function load() {
       try {
         await getCurrentUser();
-        const [screenPayload, rowPayload, exclusionPayload] = await Promise.all([
-          getScreenRun(screenRunId),
-          listScreenRows({ screenRunId, page: rowPage, pageSize: rowPageSize, sort: rowSort, direction: rowDirection }),
-          listScreenExclusions({ screenRunId, page: exclusionPage, pageSize: 25 }),
-        ]);
+        const payloads = await loadDetailPayloads(screenRunId, {
+          rowPage,
+          rowPageSize,
+          rowSort,
+          rowDirection,
+          exclusionPage,
+        });
         if (!active) {
           return;
         }
-        setScreenRun(screenPayload);
-        setRows(rowPayload.results);
-        setExclusions(exclusionPayload.results);
-        setRowCount(rowPayload.count);
-        setExclusionCount(exclusionPayload.count);
+        applyPayloads(payloads, true);
         setState("ready");
       } catch (loadError) {
         if (!active) {
@@ -93,20 +135,87 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
     };
   }, [screenRun, state]);
 
+  const rowPageCount = Math.max(1, Math.ceil(rowCount / rowPageSize));
+  const exclusionPageCount = Math.max(1, Math.ceil(exclusionCount / 25));
+  const visibleColumnCount = 5 + (showCompany ? 1 : 0) + (showMomentum ? 1 : 0);
+  const topTickers = rows.slice(0, 3).map((row) => row.ticker);
+  const exclusionSummary = useMemo(() => summarizeExclusions(exclusions), [exclusions]);
+
   async function refreshDetail() {
     try {
-      const [screenPayload, rowPayload, exclusionPayload] = await Promise.all([
-        getScreenRun(screenRunId),
-        listScreenRows({ screenRunId, page: rowPage, pageSize: rowPageSize, sort: rowSort, direction: rowDirection }),
-        listScreenExclusions({ screenRunId, page: exclusionPage, pageSize: 25 }),
-      ]);
-      setScreenRun(screenPayload);
-      setRows(rowPayload.results);
-      setExclusions(exclusionPayload.results);
-      setRowCount(rowPayload.count);
-      setExclusionCount(exclusionPayload.count);
+      const payloads = await loadDetailPayloads(screenRunId, {
+        rowPage,
+        rowPageSize,
+        rowSort,
+        rowDirection,
+        exclusionPage,
+      });
+      applyPayloads(payloads, false);
     } catch (refreshError) {
       setError(formatApiError(refreshError, "Unable to refresh the screen run."));
+    }
+  }
+
+  function applyPayloads(payloads: Awaited<ReturnType<typeof loadDetailPayloads>>, syncAnnotations: boolean) {
+    setScreenRun(payloads.run);
+    setRows(payloads.rows.results);
+    setExclusions(payloads.exclusions.results);
+    setRowCount(payloads.rows.count);
+    setExclusionCount(payloads.exclusions.count);
+    if (syncAnnotations) {
+      setIsStarred(payloads.run.is_starred);
+      setTagsText(payloads.run.tags.join(", "));
+      setNotes(payloads.run.notes);
+    }
+  }
+
+  async function handleSaveAnnotations(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSaving(true);
+    setError(null);
+    try {
+      const updated = await updateScreenRun(screenRunId, {
+        isStarred,
+        tags: splitTags(tagsText),
+        notes,
+      });
+      setScreenRun(updated);
+      setIsStarred(updated.is_starred);
+      setTagsText(updated.tags.join(", "));
+      setNotes(updated.notes);
+    } catch (saveError) {
+      setError(formatApiError(saveError, "Unable to save the run annotations."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handlePromoteToTemplate() {
+    if (screenRun == null) {
+      return;
+    }
+    const name = window.prompt("Template name", `Screen run ${screenRun.id}`);
+    if (name == null || name.trim() === "") {
+      return;
+    }
+    setIsSavingTemplate(true);
+    setError(null);
+    try {
+      await createStrategyTemplate({
+        name: name.trim(),
+        description: screenRun.notes || `Saved from screen run #${screenRun.id}`,
+        sourceScreenRunId: screenRun.id,
+        isStarred: screenRun.is_starred,
+        tags: screenRun.tags,
+        notes: screenRun.notes,
+      });
+      startTransition(() => {
+        router.push("/app/templates");
+      });
+    } catch (templateError) {
+      setError(formatApiError(templateError, "Unable to save this run as a template."));
+    } finally {
+      setIsSavingTemplate(false);
     }
   }
 
@@ -138,16 +247,15 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
     );
   }
 
-  const rowPageCount = Math.max(1, Math.ceil(rowCount / rowPageSize));
-  const exclusionPageCount = Math.max(1, Math.ceil(exclusionCount / 25));
-
   return (
     <main style={pageStyle}>
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
             <p style={eyebrowStyle}>Screen Run</p>
-            <h1 style={titleStyle}>#{screenRun.id} · {screenRun.universe.name}</h1>
+            <h1 style={titleStyle}>
+              #{screenRun.id} · {screenRun.universe.name}
+            </h1>
           </div>
           <div style={actionRowStyle}>
             <Link href="/app/screens" style={ghostLinkStyle}>
@@ -157,23 +265,17 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
               Universe
             </Link>
             <Link href={`/app/screens?draft_screen_run_id=${screenRun.id}`} style={ghostLinkStyle}>
-              Duplicate as draft
+              Clone as draft
             </Link>
-            <Link href="/app/history" style={ghostLinkStyle}>
-              History
-            </Link>
-            <Link href="/app/templates" style={ghostLinkStyle}>
-              Templates
-            </Link>
-            <Link href="/app/jobs" style={ghostLinkStyle}>
-              Jobs
-            </Link>
+            <button type="button" style={buttonStyle} onClick={() => void handlePromoteToTemplate()} disabled={isSavingTemplate}>
+              {isSavingTemplate ? "Saving..." : "Promote to template"}
+            </button>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Workspace: <strong>{screenRun.workspace.name}</strong>. Job status is persisted separately,
-          so the ranked results and exclusions remain available after refresh or re-login.
+          Workspace: <strong>{screenRun.workspace.name}</strong>. This page now remembers your
+          preferred result-table layout and lets you annotate the run before you revisit it later.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -196,32 +298,31 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
         </div>
 
         <div style={summaryGridStyle}>
-          <div style={summaryCardStyle}>
-            <p style={sectionLabelStyle}>Ranked rows</p>
-            <h2 style={summaryTitleStyle}>{screenRun.result_count.toLocaleString()}</h2>
-            <p style={metaStyle}>{screenRun.total_candidate_count.toLocaleString()} total candidates</p>
-          </div>
-          <div style={summaryCardStyle}>
-            <p style={sectionLabelStyle}>Exclusions</p>
-            <h2 style={summaryTitleStyle}>{screenRun.exclusion_count.toLocaleString()}</h2>
-            <p style={metaStyle}>{screenRun.resolved_ticker_count.toLocaleString()} tickers screened</p>
-          </div>
-          <div style={summaryCardStyle}>
-            <p style={sectionLabelStyle}>Configuration</p>
-            <h2 style={summaryTitleStyle}>{screenRun.momentum_mode}</h2>
-            <p style={metaStyle}>Top {screenRun.top_n} | Cache TTL {screenRun.cache_ttl_hours}h</p>
-          </div>
-          <div style={summaryCardStyle}>
-            <p style={sectionLabelStyle}>Export</p>
-            <h2 style={summaryTitleStyle}>{screenRun.export?.filename ?? "Pending"}</h2>
-            {screenRun.export ? (
-              <a href={screenRun.export.download_url} style={primaryLinkStyle}>
-                Download CSV
-              </a>
-            ) : (
-              <p style={metaStyle}>Export will be available when the run finishes.</p>
-            )}
-          </div>
+          <SummaryCard
+            label="What happened"
+            value={topTickers.length > 0 ? topTickers.join(", ") : "Waiting"}
+            detail={topTickers.length > 0 ? "Top names on the current page" : "Top picks appear when ranking finishes"}
+          />
+          <SummaryCard
+            label="Ranked rows"
+            value={screenRun.result_count.toLocaleString()}
+            detail={`${screenRun.total_candidate_count.toLocaleString()} total candidates`}
+          />
+          <SummaryCard
+            label="Exclusions"
+            value={screenRun.exclusion_count.toLocaleString()}
+            detail={`${screenRun.resolved_ticker_count.toLocaleString()} tickers screened`}
+          />
+          <SummaryCard
+            label="Configuration"
+            value={screenRun.momentum_mode}
+            detail={`Top ${screenRun.top_n} · Cache ${screenRun.cache_ttl_hours}h`}
+          />
+          <SummaryCard
+            label="Research status"
+            value={screenRun.is_starred ? "Starred" : "Standard"}
+            detail={screenRun.tags.length > 0 ? screenRun.tags.join(", ") : "No tags yet"}
+          />
         </div>
 
         <div style={layoutStyle}>
@@ -262,6 +363,14 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
                   <option value={25}>25</option>
                   <option value={50}>50</option>
                 </select>
+                <label style={toggleStyle}>
+                  <input type="checkbox" checked={showCompany} onChange={(event) => setShowCompany(event.target.checked)} />
+                  <span>Company</span>
+                </label>
+                <label style={toggleStyle}>
+                  <input type="checkbox" checked={showMomentum} onChange={(event) => setShowMomentum(event.target.checked)} />
+                  <span>Momentum</span>
+                </label>
               </div>
             </div>
             <div style={tableWrapperStyle}>
@@ -270,17 +379,17 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
                   <tr>
                     <th style={headerCellStyle}>#</th>
                     <th style={headerCellStyle}>Ticker</th>
-                    <th style={headerCellStyle}>Company</th>
+                    {showCompany ? <th style={headerCellStyle}>Company</th> : null}
                     <th style={headerCellStyle}>ROC</th>
                     <th style={headerCellStyle}>EY</th>
-                    <th style={headerCellStyle}>Momentum</th>
+                    {showMomentum ? <th style={headerCellStyle}>Momentum</th> : null}
                     <th style={headerCellStyle}>Final</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td style={emptyCellStyle} colSpan={7}>
+                      <td style={emptyCellStyle} colSpan={visibleColumnCount}>
                         {screenRun.job.is_terminal ? "No ranked rows were persisted." : "Rows will appear once the run finishes."}
                       </td>
                     </tr>
@@ -289,10 +398,10 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
                       <tr key={row.id}>
                         <td style={cellStyle}>{row.position}</td>
                         <td style={tickerCellStyle}>{row.ticker}</td>
-                        <td style={cellStyle}>{row.company_name ?? "-"}</td>
+                        {showCompany ? <td style={cellStyle}>{row.company_name ?? "-"}</td> : null}
                         <td style={cellStyle}>{formatNumber(row.return_on_capital)}</td>
                         <td style={cellStyle}>{formatNumber(row.earnings_yield)}</td>
-                        <td style={cellStyle}>{formatNumber(row.momentum_6m)}</td>
+                        {showMomentum ? <td style={cellStyle}>{formatNumber(row.momentum_6m)}</td> : null}
                         <td style={cellStyle}>{row.final_score ?? "-"}</td>
                       </tr>
                     ))
@@ -301,15 +410,12 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
               </table>
             </div>
             <div style={paginationStyle}>
-              <button
-                type="button"
-                style={ghostButtonStyle}
-                onClick={() => setRowPage((value) => Math.max(1, value - 1))}
-                disabled={rowPage <= 1}
-              >
+              <button type="button" style={ghostButtonStyle} onClick={() => setRowPage((value) => Math.max(1, value - 1))} disabled={rowPage <= 1}>
                 Previous
               </button>
-              <span style={metaStyle}>Page {rowPage} of {rowPageCount}</span>
+              <span style={metaStyle}>
+                Page {rowPage} of {rowPageCount}
+              </span>
               <button
                 type="button"
                 style={ghostButtonStyle}
@@ -321,63 +427,178 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
             </div>
           </section>
 
-          <section style={sectionCardStyle}>
-            <div style={tableHeaderStyle}>
-              <div>
-                <p style={sectionLabelStyle}>Exclusions</p>
-                <h2 style={tableTitleStyle}>{exclusionCount.toLocaleString()} rows</h2>
+          <div style={stackStyle}>
+            <section style={sectionCardStyle}>
+              <div style={tableHeaderStyle}>
+                <div>
+                  <p style={sectionLabelStyle}>Research notes</p>
+                  <h2 style={tableTitleStyle}>Bookmark and annotate</h2>
+                </div>
+                {screenRun.is_starred ? <span style={starPillStyle}>Starred</span> : null}
               </div>
-              <span style={pillStyle}>First page sorted by ticker</span>
-            </div>
-            <div style={tableWrapperStyle}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={headerCellStyle}>Ticker</th>
-                    <th style={headerCellStyle}>Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {exclusions.length === 0 ? (
+              <form onSubmit={handleSaveAnnotations} style={formStyle}>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Tags</span>
+                  <input
+                    type="text"
+                    value={tagsText}
+                    onChange={(event) => setTagsText(event.target.value)}
+                    placeholder="watchlist, review, quality"
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Notes</span>
+                  <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={6} style={textareaStyle} />
+                </label>
+                <label style={checkboxFieldStyle}>
+                  <input type="checkbox" checked={isStarred} onChange={(event) => setIsStarred(event.target.checked)} />
+                  <span>Star this run so it stays easy to find in history</span>
+                </label>
+                <button type="submit" style={buttonStyle} disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save annotations"}
+                </button>
+              </form>
+            </section>
+
+            <section style={sectionCardStyle}>
+              <div style={tableHeaderStyle}>
+                <div>
+                  <p style={sectionLabelStyle}>Artifacts</p>
+                  <h2 style={tableTitleStyle}>{screenRun.artifacts.length} available</h2>
+                </div>
+              </div>
+              <div style={stackStyle}>
+                {screenRun.artifacts.map((artifact) => (
+                  <a key={artifact.download_url} href={artifact.download_url} style={artifactLinkStyle}>
+                    <strong>{artifact.label}</strong>
+                    <span style={subtleMetaStyle}>{artifact.filename}</span>
+                  </a>
+                ))}
+              </div>
+            </section>
+
+            <section style={sectionCardStyle}>
+              <div style={tableHeaderStyle}>
+                <div>
+                  <p style={sectionLabelStyle}>Exclusions</p>
+                  <h2 style={tableTitleStyle}>{exclusionCount.toLocaleString()} rows</h2>
+                </div>
+                <span style={pillStyle}>First page</span>
+              </div>
+              {exclusionSummary.length > 0 ? (
+                <div style={tagRowStyle}>
+                  {exclusionSummary.map((item) => (
+                    <span key={item.reason} style={tagStyle}>
+                      {item.reason} ({item.count})
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div style={tableWrapperStyle}>
+                <table style={tableStyle}>
+                  <thead>
                     <tr>
-                      <td style={emptyCellStyle} colSpan={2}>
-                        {screenRun.job.is_terminal ? "No exclusions were recorded." : "Exclusions will appear once the run finishes."}
-                      </td>
+                      <th style={headerCellStyle}>Ticker</th>
+                      <th style={headerCellStyle}>Reason</th>
                     </tr>
-                  ) : (
-                    exclusions.map((exclusion) => (
-                      <tr key={exclusion.id}>
-                        <td style={tickerCellStyle}>{exclusion.ticker}</td>
-                        <td style={cellStyle}>{exclusion.reason}</td>
+                  </thead>
+                  <tbody>
+                    {exclusions.length === 0 ? (
+                      <tr>
+                        <td style={emptyCellStyle} colSpan={2}>
+                          {screenRun.job.is_terminal ? "No exclusions were recorded." : "Exclusions will appear once the run finishes."}
+                        </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div style={paginationStyle}>
-              <button
-                type="button"
-                style={ghostButtonStyle}
-                onClick={() => setExclusionPage((value) => Math.max(1, value - 1))}
-                disabled={exclusionPage <= 1}
-              >
-                Previous
-              </button>
-              <span style={metaStyle}>Page {exclusionPage} of {exclusionPageCount}</span>
-              <button
-                type="button"
-                style={ghostButtonStyle}
-                onClick={() => setExclusionPage((value) => Math.min(exclusionPageCount, value + 1))}
-                disabled={exclusionPage >= exclusionPageCount}
-              >
-                Next
-              </button>
-            </div>
-          </section>
+                    ) : (
+                      exclusions.map((exclusion) => (
+                        <tr key={exclusion.id}>
+                          <td style={tickerCellStyle}>{exclusion.ticker}</td>
+                          <td style={cellStyle}>{exclusion.reason}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div style={paginationStyle}>
+                <button
+                  type="button"
+                  style={ghostButtonStyle}
+                  onClick={() => setExclusionPage((value) => Math.max(1, value - 1))}
+                  disabled={exclusionPage <= 1}
+                >
+                  Previous
+                </button>
+                <span style={metaStyle}>
+                  Page {exclusionPage} of {exclusionPageCount}
+                </span>
+                <button
+                  type="button"
+                  style={ghostButtonStyle}
+                  onClick={() => setExclusionPage((value) => Math.min(exclusionPageCount, value + 1))}
+                  disabled={exclusionPage >= exclusionPageCount}
+                >
+                  Next
+                </button>
+              </div>
+            </section>
+          </div>
         </div>
       </section>
     </main>
+  );
+}
+
+async function loadDetailPayloads(
+  screenRunId: number,
+  options: {
+    rowPage: number;
+    rowPageSize: number;
+    rowSort: string;
+    rowDirection: "asc" | "desc";
+    exclusionPage: number;
+  },
+) {
+  const [run, rows, exclusions] = await Promise.all([
+    getScreenRun(screenRunId),
+    listScreenRows({
+      screenRunId,
+      page: options.rowPage,
+      pageSize: options.rowPageSize,
+      sort: options.rowSort,
+      direction: options.rowDirection,
+    }),
+    listScreenExclusions({ screenRunId, page: options.exclusionPage, pageSize: 25 }),
+  ]);
+  return { run, rows, exclusions };
+}
+
+function summarizeExclusions(exclusions: ScreenExclusion[]): Array<{ reason: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const exclusion of exclusions) {
+    counts.set(exclusion.reason, (counts.get(exclusion.reason) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 4);
+}
+
+function splitTags(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div style={summaryCardStyle}>
+      <p style={sectionLabelStyle}>{label}</p>
+      <h2 style={summaryTitleStyle}>{value}</h2>
+      <p style={metaStyle}>{detail}</p>
+    </div>
   );
 }
 
@@ -420,7 +641,7 @@ const pageStyle: CSSProperties = {
 };
 
 const panelStyle: CSSProperties = {
-  width: "min(1440px, 100%)",
+  width: "min(1480px, 100%)",
   margin: "0 auto",
   borderRadius: "28px",
   padding: "2rem",
@@ -456,8 +677,12 @@ const summaryCardStyle: CSSProperties = {
   background: "#f8fbff",
   border: "1px solid rgba(73, 98, 128, 0.18)",
   display: "grid",
-  gap: "0.65rem",
-  alignContent: "start",
+  gap: "0.55rem",
+};
+
+const summaryTitleStyle: CSSProperties = {
+  margin: 0,
+  fontSize: "1.55rem",
 };
 
 const statusCardStyle: CSSProperties = {
@@ -475,11 +700,46 @@ const statusHeaderStyle: CSSProperties = {
   gap: "1rem",
 };
 
+const statusTitleStyle: CSSProperties = {
+  margin: "0.35rem 0 0",
+  fontSize: "1.9rem",
+};
+
+const progressTrackStyle: CSSProperties = {
+  marginTop: "1rem",
+  width: "100%",
+  height: "0.7rem",
+  borderRadius: "999px",
+  background: "#dde6f0",
+  overflow: "hidden",
+};
+
+const progressFillStyle: CSSProperties = {
+  height: "100%",
+  borderRadius: "999px",
+  background: "linear-gradient(90deg, #24405f 0%, #5d8dc0 100%)",
+};
+
+const progressMetaStyle: CSSProperties = {
+  marginTop: "0.75rem",
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "0.75rem",
+  color: "#496280",
+  flexWrap: "wrap",
+};
+
 const layoutStyle: CSSProperties = {
   display: "grid",
   gap: "1rem",
-  gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.9fr)",
+  gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.95fr)",
   marginTop: "1.5rem",
+};
+
+const stackStyle: CSSProperties = {
+  display: "grid",
+  gap: "1rem",
+  alignContent: "start",
 };
 
 const sectionCardStyle: CSSProperties = {
@@ -497,10 +757,68 @@ const tableHeaderStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
+const tableTitleStyle: CSSProperties = {
+  margin: "0.35rem 0 0",
+  fontSize: "1.45rem",
+};
+
 const toolbarStyle: CSSProperties = {
   display: "flex",
   gap: "0.65rem",
   flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const formStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.85rem",
+  marginTop: "1rem",
+};
+
+const fieldStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.45rem",
+};
+
+const labelStyle: CSSProperties = {
+  fontSize: "0.92rem",
+  color: "#334862",
+};
+
+const inputStyle: CSSProperties = {
+  width: "100%",
+  borderRadius: "14px",
+  border: "1px solid rgba(73, 98, 128, 0.25)",
+  padding: "0.85rem 0.95rem",
+  fontSize: "0.98rem",
+  background: "#fff",
+};
+
+const textareaStyle: CSSProperties = {
+  ...inputStyle,
+  resize: "vertical",
+  minHeight: "7rem",
+};
+
+const checkboxFieldStyle: CSSProperties = {
+  display: "flex",
+  gap: "0.55rem",
+  alignItems: "center",
+  padding: "0.9rem 1rem",
+  borderRadius: "14px",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  background: "#fff",
+};
+
+const toggleStyle: CSSProperties = {
+  display: "inline-flex",
+  gap: "0.4rem",
+  alignItems: "center",
+  padding: "0.65rem 0.8rem",
+  borderRadius: "12px",
+  background: "#fff",
+  border: "1px solid rgba(73, 98, 128, 0.18)",
+  color: "#334862",
 };
 
 const tableWrapperStyle: CSSProperties = {
@@ -558,6 +876,15 @@ const compactInputStyle: CSSProperties = {
   background: "#fff",
 };
 
+const buttonStyle: CSSProperties = {
+  border: 0,
+  borderRadius: "999px",
+  padding: "0.85rem 1rem",
+  background: "#162132",
+  color: "#f5f7fb",
+  cursor: "pointer",
+};
+
 const ghostButtonStyle: CSSProperties = {
   border: 0,
   borderRadius: "999px",
@@ -589,6 +916,17 @@ const ghostLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
+const artifactLinkStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.2rem",
+  padding: "0.9rem 1rem",
+  borderRadius: "16px",
+  background: "#fff",
+  border: "1px solid rgba(73, 98, 128, 0.15)",
+  color: "#162132",
+  textDecoration: "none",
+};
+
 const eyebrowStyle: CSSProperties = {
   margin: 0,
   fontSize: "0.85rem",
@@ -603,7 +941,7 @@ const titleStyle: CSSProperties = {
 };
 
 const bodyStyle: CSSProperties = {
-  maxWidth: "64rem",
+  maxWidth: "68rem",
   lineHeight: 1.6,
   color: "#334862",
 };
@@ -624,57 +962,44 @@ const sectionLabelStyle: CSSProperties = {
   color: "#5c728d",
 };
 
-const summaryTitleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: "1.8rem",
-};
-
-const statusTitleStyle: CSSProperties = {
-  margin: "0.45rem 0 0",
-  fontSize: "1.7rem",
-  textTransform: "capitalize",
-};
-
-const tableTitleStyle: CSSProperties = {
-  margin: "0.45rem 0 0",
-  fontSize: "1.4rem",
-};
-
 const metaStyle: CSSProperties = {
-  margin: 0,
+  margin: "0.25rem 0",
   color: "#496280",
   lineHeight: 1.5,
 };
 
-const progressTrackStyle: CSSProperties = {
-  width: "100%",
-  height: "14px",
-  borderRadius: "999px",
-  background: "#dbe5ef",
-  overflow: "hidden",
-  marginTop: "1rem",
-};
-
-const progressFillStyle: CSSProperties = {
-  height: "100%",
-  borderRadius: "999px",
-  background: "linear-gradient(90deg, #162132, #496280)",
-};
-
-const progressMetaStyle: CSSProperties = {
-  marginTop: "0.6rem",
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "1rem",
-  color: "#496280",
-  flexWrap: "wrap",
+const subtleMetaStyle: CSSProperties = {
+  color: "#6d8097",
+  lineHeight: 1.5,
 };
 
 const pillStyle: CSSProperties = {
-  alignSelf: "flex-start",
-  padding: "0.4rem 0.7rem",
+  padding: "0.35rem 0.6rem",
   borderRadius: "999px",
-  background: "#e5edf6",
-  color: "#3d556f",
-  fontSize: "0.88rem",
+  background: "#dde6f0",
+  color: "#162132",
+  fontSize: "0.82rem",
+};
+
+const starPillStyle: CSSProperties = {
+  padding: "0.25rem 0.55rem",
+  borderRadius: "999px",
+  background: "#fff4cc",
+  color: "#8b5c00",
+  fontSize: "0.82rem",
+};
+
+const tagRowStyle: CSSProperties = {
+  display: "flex",
+  gap: "0.45rem",
+  flexWrap: "wrap",
+  marginTop: "0.85rem",
+};
+
+const tagStyle: CSSProperties = {
+  padding: "0.3rem 0.55rem",
+  borderRadius: "999px",
+  background: "#dde6f0",
+  color: "#334862",
+  fontSize: "0.84rem",
 };

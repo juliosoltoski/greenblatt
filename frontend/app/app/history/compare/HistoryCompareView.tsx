@@ -124,6 +124,20 @@ export function HistoryCompareView({ kind, leftId, rightId }: HistoryCompareView
     };
   }, [backtestHoldings, backtestRuns]);
 
+  function handleExportComparison() {
+    const payload =
+      kind === "screen"
+        ? { kind, runs: screenRuns, comparison: screenComparison, rows: screenRows }
+        : { kind, runs: backtestRuns, comparison: backtestComparison, holdings: backtestHoldings };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${kind}-comparison-${leftId}-vs-${rightId}.json`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+  }
+
   if (state === "loading") {
     return (
       <main style={pageStyle}>
@@ -155,7 +169,7 @@ export function HistoryCompareView({ kind, leftId, rightId }: HistoryCompareView
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>Initial Comparison</p>
+            <p style={eyebrowStyle}>Comparison</p>
             <h1 style={titleStyle}>{kind === "screen" ? "Screen runs" : "Backtest runs"} side by side</h1>
           </div>
           <div style={actionRowStyle}>
@@ -165,6 +179,9 @@ export function HistoryCompareView({ kind, leftId, rightId }: HistoryCompareView
             <Link href="/app/templates" style={ghostLinkStyle}>
               Templates
             </Link>
+            <button type="button" style={buttonStyle} onClick={handleExportComparison}>
+              Export comparison
+            </button>
           </div>
         </div>
 
@@ -174,6 +191,11 @@ export function HistoryCompareView({ kind, leftId, rightId }: HistoryCompareView
               <ComparisonCard label={`Run #${screenRuns[0].id}`} primary={screenRuns[0].universe.name} detail={`${screenRuns[0].result_count} rows · ${screenRuns[0].exclusion_count} exclusions`} />
               <ComparisonCard label={`Run #${screenRuns[1].id}`} primary={screenRuns[1].universe.name} detail={`${screenRuns[1].result_count} rows · ${screenRuns[1].exclusion_count} exclusions`} />
               <ComparisonCard label="Top-10 overlap" primary={String(screenComparison.overlap.length)} detail={screenComparison.overlap.join(", ") || "None"} />
+              <ComparisonCard
+                label="Result delta"
+                primary={`${screenRuns[0].result_count - screenRuns[1].result_count > 0 ? "+" : ""}${screenRuns[0].result_count - screenRuns[1].result_count}`}
+                detail={`Exclusion delta ${screenRuns[0].exclusion_count - screenRuns[1].exclusion_count > 0 ? "+" : ""}${screenRuns[0].exclusion_count - screenRuns[1].exclusion_count}`}
+              />
             </div>
             <div style={layoutStyle}>
               <CompareList title="Left only" values={screenComparison.leftOnly} />
@@ -189,6 +211,11 @@ export function HistoryCompareView({ kind, leftId, rightId }: HistoryCompareView
               <ComparisonCard label={`Run #${backtestRuns[0].id}`} primary={formatPercent(backtestRuns[0].summary.total_return)} detail={`Trades ${backtestRuns[0].trade_count} · Max DD ${formatPercent(backtestRuns[0].summary.max_drawdown)}`} />
               <ComparisonCard label={`Run #${backtestRuns[1].id}`} primary={formatPercent(backtestRuns[1].summary.total_return)} detail={`Trades ${backtestRuns[1].trade_count} · Max DD ${formatPercent(backtestRuns[1].summary.max_drawdown)}`} />
               <ComparisonCard label="Final holdings overlap" primary={String(backtestComparison.overlap.length)} detail={backtestComparison.overlap.join(", ") || "None"} />
+              <ComparisonCard
+                label="Alpha delta"
+                primary={formatSignedPercent(asNumber(backtestRuns[0].summary.alpha_vs_benchmark) - asNumber(backtestRuns[1].summary.alpha_vs_benchmark))}
+                detail={`Trade delta ${backtestRuns[0].trade_count - backtestRuns[1].trade_count > 0 ? "+" : ""}${backtestRuns[0].trade_count - backtestRuns[1].trade_count}`}
+              />
             </div>
             <div style={layoutStyle}>
               <CompareList title="Left only" values={backtestComparison.leftOnly} />
@@ -234,6 +261,15 @@ function formatPercent(value: unknown): string {
     return "-";
   }
   return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatSignedPercent(value: number): string {
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${(value * 100).toFixed(2)}%`;
+}
+
+function asNumber(value: unknown): number {
+  return typeof value === "number" ? value : 0;
 }
 
 const pageStyle: CSSProperties = {
@@ -325,6 +361,15 @@ const ghostLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
+const buttonStyle: CSSProperties = {
+  border: 0,
+  borderRadius: "999px",
+  padding: "0.8rem 1rem",
+  background: "#162132",
+  color: "#f5f7fb",
+  cursor: "pointer",
+};
+
 const eyebrowStyle: CSSProperties = {
   margin: 0,
   fontSize: "0.85rem",
@@ -361,4 +406,3 @@ const summaryTitleStyle: CSSProperties = {
   margin: "0.45rem 0 0",
   fontSize: "1.8rem",
 };
-

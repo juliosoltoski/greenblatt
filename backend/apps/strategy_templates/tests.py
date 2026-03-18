@@ -63,7 +63,14 @@ class StrategyTemplateApiTests(TestCase):
 
         response = self.client.post(
             "/api/v1/strategy-templates/",
-            data={"name": "Growth Screen", "description": "Saved from run", "source_screen_run_id": screen_run.id},
+            data={
+                "name": "Growth Screen",
+                "description": "Saved from run",
+                "source_screen_run_id": screen_run.id,
+                "is_starred": True,
+                "tags": ["favorite"],
+                "notes": "Use for recurring review.",
+            },
             content_type="application/json",
         )
 
@@ -72,15 +79,24 @@ class StrategyTemplateApiTests(TestCase):
         self.assertEqual(payload["workflow_kind"], StrategyTemplate.WorkflowKind.SCREEN)
         self.assertEqual(payload["config"]["top_n"], 40)
         self.assertEqual(payload["source_screen_run_id"], screen_run.id)
+        self.assertTrue(payload["is_starred"])
+        self.assertEqual(payload["tags"], ["favorite"])
+        self.assertEqual(payload["notes"], "Use for recurring review.")
 
         template_id = payload["id"]
         updated = self.client.patch(
             f"/api/v1/strategy-templates/{template_id}/",
-            data={"name": "Updated Growth Screen", "description": "Edited"},
+            data={"name": "Updated Growth Screen", "description": "Edited", "tags": ["favorite", "screen"], "notes": "Promoted after review."},
             content_type="application/json",
         )
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()["name"], "Updated Growth Screen")
+        self.assertEqual(updated.json()["tags"], ["favorite", "screen"])
+        self.assertEqual(updated.json()["notes"], "Promoted after review.")
+
+        listing = self.client.get(f"/api/v1/strategy-templates/?workspace_id={self.workspace.id}&starred_only=true")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json()["count"], 1)
 
     @patch("apps.screens.tasks.run_screen_job.apply_async")
     def test_launch_screen_template(self, apply_async) -> None:
@@ -148,4 +164,3 @@ class StrategyTemplateApiTests(TestCase):
         delete = self.client.delete(f"/api/v1/strategy-templates/{template.id}/")
         self.assertEqual(delete.status_code, 204)
         self.assertFalse(StrategyTemplate.objects.filter(pk=template.id).exists())
-

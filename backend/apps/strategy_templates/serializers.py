@@ -10,6 +10,7 @@ class StrategyTemplateListSerializer(serializers.Serializer):
     workflow_kind = serializers.ChoiceField(choices=StrategyTemplate.WorkflowKind.choices, required=False)
     page = serializers.IntegerField(required=False, default=1, min_value=1)
     page_size = serializers.IntegerField(required=False, default=20, min_value=1, max_value=100)
+    starred_only = serializers.BooleanField(required=False)
 
 
 class StrategyTemplateCreateSerializer(serializers.Serializer):
@@ -21,6 +22,9 @@ class StrategyTemplateCreateSerializer(serializers.Serializer):
     config = serializers.JSONField(required=False)
     source_screen_run_id = serializers.IntegerField(required=False, min_value=1)
     source_backtest_run_id = serializers.IntegerField(required=False, min_value=1)
+    is_starred = serializers.BooleanField(required=False, default=False)
+    tags = serializers.ListField(child=serializers.CharField(max_length=50), required=False, allow_empty=True, default=list)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs):
         source_screen_run_id = attrs.get("source_screen_run_id")
@@ -42,10 +46,40 @@ class StrategyTemplateCreateSerializer(serializers.Serializer):
                 )
         return attrs
 
+    def validate_tags(self, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            cleaned = item.strip()
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            normalized.append(cleaned[:50])
+        return normalized
+
 
 class StrategyTemplateUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, max_length=255)
     description = serializers.CharField(required=False, allow_blank=True)
     universe_id = serializers.IntegerField(required=False, min_value=1)
     config = serializers.JSONField(required=False)
+    is_starred = serializers.BooleanField(required=False)
+    tags = serializers.ListField(child=serializers.CharField(max_length=50), required=False, allow_empty=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
 
+    def validate_tags(self, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            cleaned = item.strip()
+            if not cleaned:
+                continue
+            lowered = cleaned.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            normalized.append(cleaned[:50])
+        return normalized

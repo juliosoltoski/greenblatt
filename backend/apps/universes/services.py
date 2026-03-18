@@ -307,6 +307,9 @@ class UniverseManagerService:
         updated_by,
         name: str | None = None,
         description: str | None = None,
+        is_starred: bool | None = None,
+        tags: list[str] | None = None,
+        notes: str | None = None,
         source_type: str | None = None,
         profile_key: str | None = None,
         manual_tickers: str | None = None,
@@ -319,6 +322,12 @@ class UniverseManagerService:
             universe.name = name.strip()
         if description is not None:
             universe.description = description.strip()
+        if is_starred is not None:
+            universe.is_starred = is_starred
+        if tags is not None:
+            universe.tags = tags
+        if notes is not None:
+            universe.notes = notes.strip()
 
         if source_changed:
             resolved_source_type = source_type or universe.source_type
