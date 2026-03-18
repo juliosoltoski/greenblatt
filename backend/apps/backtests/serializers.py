@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from greenblatt.services import normalize_provider_name
+
+
+def _validate_provider_choice(value: str) -> str:
+    try:
+        return normalize_provider_name(value)
+    except ValueError as exc:
+        raise serializers.ValidationError(str(exc)) from exc
+
 
 class BacktestLaunchSerializer(serializers.Serializer):
     workspace_id = serializers.IntegerField(required=False, min_value=1)
@@ -26,6 +35,8 @@ class BacktestLaunchSerializer(serializers.Serializer):
     use_cache = serializers.BooleanField(required=False, default=True)
     refresh_cache = serializers.BooleanField(required=False, default=False)
     cache_ttl_hours = serializers.FloatField(required=False, default=24.0, min_value=0)
+    provider_name = serializers.CharField(required=False, max_length=64)
+    fallback_provider_name = serializers.CharField(required=False, max_length=64)
 
     def validate(self, attrs):
         if attrs["end_date"] < attrs["start_date"]:
@@ -45,6 +56,12 @@ class BacktestLaunchSerializer(serializers.Serializer):
             seen.add(lowered)
             normalized.append(cleaned)
         return normalized
+
+    def validate_provider_name(self, value: str) -> str:
+        return _validate_provider_choice(value)
+
+    def validate_fallback_provider_name(self, value: str) -> str:
+        return _validate_provider_choice(value)
 
 
 class PagingSerializer(serializers.Serializer):

@@ -6,6 +6,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.throttling import LaunchRateThrottle, MethodScopedThrottleMixin
 from apps.backtests.models import BacktestRun
 from apps.backtests.presenters import serialize_backtest_run
 from apps.screens.models import ScreenRun
@@ -81,8 +82,11 @@ def _universe_queryset(user):
     )
 
 
-class StrategyTemplateListCreateView(APIView):
+class StrategyTemplateListCreateView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "POST": [LaunchRateThrottle],
+    }
 
     def get(self, request):
         serializer = StrategyTemplateListSerializer(data=request.query_params)
@@ -155,8 +159,12 @@ class StrategyTemplateListCreateView(APIView):
         return Response(serialize_strategy_template(template), status=status.HTTP_201_CREATED)
 
 
-class StrategyTemplateDetailView(APIView):
+class StrategyTemplateDetailView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "PATCH": [LaunchRateThrottle],
+        "DELETE": [LaunchRateThrottle],
+    }
 
     def get(self, request, template_id: int):
         template = get_object_or_404(_template_queryset(request.user), pk=template_id)
@@ -188,8 +196,11 @@ class StrategyTemplateDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class StrategyTemplateLaunchView(APIView):
+class StrategyTemplateLaunchView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "POST": [LaunchRateThrottle],
+    }
 
     def post(self, request, template_id: int):
         template = get_object_or_404(_template_queryset(request.user), pk=template_id)
@@ -200,4 +211,3 @@ class StrategyTemplateLaunchView(APIView):
             return Response({"workflow_kind": "screen", "run": serialize_screen_run(run)}, status=response_status)
         response_status = status.HTTP_202_ACCEPTED if run.job.state == run.job.State.QUEUED else status.HTTP_503_SERVICE_UNAVAILABLE
         return Response({"workflow_kind": "backtest", "run": serialize_backtest_run(run)}, status=response_status)
-

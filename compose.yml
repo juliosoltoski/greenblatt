@@ -43,7 +43,7 @@ services:
       - minio_data:/data
 
   backend:
-    image: greenblatt-backend:latest
+    image: ${BACKEND_IMAGE:-greenblatt-backend:latest}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -55,6 +55,11 @@ services:
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080}
       ARTIFACT_STORAGE_BACKEND: ${ARTIFACT_STORAGE_BACKEND:-filesystem}
       ARTIFACT_STORAGE_ROOT: ${ARTIFACT_STORAGE_ROOT:-/var/lib/greenblatt/artifacts}
+      MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-yahoo}
+      MARKET_DATA_PROVIDER_FALLBACK: ${MARKET_DATA_PROVIDER_FALLBACK:-}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+      ALPHA_VANTAGE_BASE_URL: ${ALPHA_VANTAGE_BASE_URL:-https://www.alphavantage.co/query}
+      ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE: ${ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE:-5}
       POSTGRES_DB: ${POSTGRES_DB:-greenblatt}
       POSTGRES_USER: ${POSTGRES_USER:-greenblatt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenblatt}
@@ -94,7 +99,7 @@ services:
       start_period: 20s
 
   worker:
-    image: greenblatt-backend:latest
+    image: ${BACKEND_IMAGE:-greenblatt-backend:latest}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -106,6 +111,11 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,proxy}
       ARTIFACT_STORAGE_BACKEND: ${ARTIFACT_STORAGE_BACKEND:-filesystem}
       ARTIFACT_STORAGE_ROOT: ${ARTIFACT_STORAGE_ROOT:-/var/lib/greenblatt/artifacts}
+      MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-yahoo}
+      MARKET_DATA_PROVIDER_FALLBACK: ${MARKET_DATA_PROVIDER_FALLBACK:-}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+      ALPHA_VANTAGE_BASE_URL: ${ALPHA_VANTAGE_BASE_URL:-https://www.alphavantage.co/query}
+      ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE: ${ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE:-5}
       POSTGRES_DB: ${POSTGRES_DB:-greenblatt}
       POSTGRES_USER: ${POSTGRES_USER:-greenblatt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenblatt}
@@ -133,7 +143,7 @@ services:
       - backend_artifacts:/var/lib/greenblatt/artifacts
 
   beat:
-    image: greenblatt-backend:latest
+    image: ${BACKEND_IMAGE:-greenblatt-backend:latest}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -145,6 +155,11 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,proxy}
       ARTIFACT_STORAGE_BACKEND: ${ARTIFACT_STORAGE_BACKEND:-filesystem}
       ARTIFACT_STORAGE_ROOT: ${ARTIFACT_STORAGE_ROOT:-/var/lib/greenblatt/artifacts}
+      MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-yahoo}
+      MARKET_DATA_PROVIDER_FALLBACK: ${MARKET_DATA_PROVIDER_FALLBACK:-}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+      ALPHA_VANTAGE_BASE_URL: ${ALPHA_VANTAGE_BASE_URL:-https://www.alphavantage.co/query}
+      ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE: ${ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE:-5}
       POSTGRES_DB: ${POSTGRES_DB:-greenblatt}
       POSTGRES_USER: ${POSTGRES_USER:-greenblatt}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenblatt}
@@ -172,7 +187,7 @@ services:
       - backend_artifacts:/var/lib/greenblatt/artifacts
 
   frontend:
-    image: greenblatt-frontend:latest
+    image: ${FRONTEND_IMAGE:-greenblatt-frontend:latest}
     build:
       context: ./frontend
     environment:

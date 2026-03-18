@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -9,7 +11,10 @@ import pandas as pd
 
 from greenblatt.engine import MagicFormulaEngine
 from greenblatt.models import BacktestConfig, BacktestResult, ScreenConfig, ScreenResult
-from greenblatt.providers.base import MarketDataProvider
+from greenblatt.providers.alpha_vantage import AlphaVantageProvider
+from greenblatt.providers.base import MarketDataProvider, ProviderHealth
+from greenblatt.providers.errors import ProviderConfigurationError
+from greenblatt.providers.failover import FailoverProvider
 from greenblatt.providers.yahoo import YahooFinanceProvider
 from greenblatt.simulation import MagicFormulaBacktester
 from greenblatt.universe import UniverseProfile, list_profiles, load_custom_universe, resolve_profile
@@ -20,9 +25,23 @@ ProviderFactory = Callable[["ProviderConfig"], MarketDataProvider]
 EngineFactory = Callable[[], MagicFormulaEngine]
 BacktesterFactory = Callable[[MarketDataProvider], MagicFormulaBacktester]
 
+DEFAULT_PROVIDER_NAME = "yahoo"
+ALPHA_VANTAGE_DEFAULT_BASE_URL = "https://www.alphavantage.co/query"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderDescriptor:
+    key: str
+    label: str
+    description: str
+    supports_historical_fundamentals: bool
+    requires_credentials: bool = False
+
 
 @dataclass(slots=True)
 class ProviderConfig:
+    provider_name: str = DEFAULT_PROVIDER_NAME
+    fallback_provider_name: str | None = None
     use_cache: bool = True
     refresh_cache: bool = False
     cache_ttl_hours: float = 24.0
@@ -113,6 +132,192 @@ def build_yahoo_provider(config: ProviderConfig) -> MarketDataProvider:
     )
 
 
+build_yahoo_provider.provider_name = "yahoo"
+
+
+def build_alpha_vantage_provider(config: ProviderConfig) -> MarketDataProvider:
+    return AlphaVantageProvider(
+        api_key=os.getenv("ALPHA_VANTAGE_API_KEY", ""),
+        base_url=os.getenv("ALPHA_VANTAGE_BASE_URL", ALPHA_VANTAGE_DEFAULT_BASE_URL),
+        max_calls_per_minute=_env_int("ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE", 5),
+        use_cache=config.use_cache,
+        refresh_cache=config.refresh_cache,
+        cache_ttl_hours=config.cache_ttl_hours,
+    )
+
+
+build_alpha_vantage_provider.provider_name = "alpha_vantage"
+
+
+PROVIDER_DESCRIPTORS: dict[str, ProviderDescriptor] = {
+    "yahoo": ProviderDescriptor(
+        key="yahoo",
+        label="Yahoo Finance",
+        description="Unauthenticated market data access through yfinance and NASDAQ directory helpers.",
+        supports_historical_fundamentals=YahooFinanceProvider.supports_historical_fundamentals,
+        requires_credentials=False,
+    ),
+    "alpha_vantage": ProviderDescriptor(
+        key="alpha_vantage",
+        label="Alpha Vantage",
+        description="API-key-backed market data access with fundamentals, daily prices, and explicit rate limits.",
+        supports_historical_fundamentals=AlphaVantageProvider.supports_historical_fundamentals,
+        requires_credentials=True,
+    ),
+}
+PROVIDER_FACTORIES: dict[str, ProviderFactory] = {
+    "yahoo": build_yahoo_provider,
+    "alpha_vantage": build_alpha_vantage_provider,
+}
+
+
+def normalize_provider_name(name: str | None, *, default: str = DEFAULT_PROVIDER_NAME) -> str:
+    raw = (name or default).strip().lower().replace("-", "_")
+    if raw not in PROVIDER_FACTORIES:
+        supported = ", ".join(sorted(PROVIDER_FACTORIES))
+        raise ValueError(f"Unsupported provider '{name}'. Supported providers: {supported}.")
+    return raw
+
+
+def serialize_provider_config(config: ProviderConfig) -> dict[str, object]:
+    provider_name = normalize_provider_name(config.provider_name)
+    fallback_provider_name = config.fallback_provider_name
+    if fallback_provider_name:
+        fallback_provider_name = normalize_provider_name(fallback_provider_name)
+        if fallback_provider_name == provider_name:
+            fallback_provider_name = None
+    return {
+        "provider_name": provider_name,
+        "fallback_provider_name": fallback_provider_name,
+        "use_cache": bool(config.use_cache),
+        "refresh_cache": bool(config.refresh_cache),
+        "cache_ttl_hours": float(config.cache_ttl_hours),
+    }
+
+
+def provider_config_from_payload(
+    payload: Mapping[str, Any] | None,
+    *,
+    default_provider_name: str = DEFAULT_PROVIDER_NAME,
+    default_fallback_provider_name: str | None = None,
+    default_use_cache: bool = True,
+    default_refresh_cache: bool = False,
+    default_cache_ttl_hours: float = 24.0,
+) -> ProviderConfig:
+    data = payload or {}
+    provider_name = normalize_provider_name(_coerce_string(data.get("provider_name")), default=default_provider_name)
+    fallback_provider_name = _coerce_string(data.get("fallback_provider_name")) or default_fallback_provider_name
+    if fallback_provider_name:
+        fallback_provider_name = normalize_provider_name(fallback_provider_name)
+        if fallback_provider_name == provider_name:
+            fallback_provider_name = None
+    return ProviderConfig(
+        provider_name=provider_name,
+        fallback_provider_name=fallback_provider_name,
+        use_cache=_coerce_bool(data.get("use_cache"), default_use_cache),
+        refresh_cache=_coerce_bool(data.get("refresh_cache"), default_refresh_cache),
+        cache_ttl_hours=_coerce_float(data.get("cache_ttl_hours"), default_cache_ttl_hours),
+    )
+
+
+def list_provider_descriptors() -> list[dict[str, object]]:
+    return [
+        {
+            "key": descriptor.key,
+            "label": descriptor.label,
+            "description": descriptor.description,
+            "supports_historical_fundamentals": descriptor.supports_historical_fundamentals,
+            "requires_credentials": descriptor.requires_credentials,
+        }
+        for descriptor in PROVIDER_DESCRIPTORS.values()
+    ]
+
+
+def build_provider(config: ProviderConfig) -> MarketDataProvider:
+    serialized = serialize_provider_config(config)
+    primary_name = str(serialized["provider_name"])
+    primary = PROVIDER_FACTORIES[primary_name](config)
+    fallback_name = serialized["fallback_provider_name"]
+    if not fallback_name:
+        return primary
+    fallback_config = ProviderConfig(
+        provider_name=str(fallback_name),
+        use_cache=bool(serialized["use_cache"]),
+        refresh_cache=bool(serialized["refresh_cache"]),
+        cache_ttl_hours=float(serialized["cache_ttl_hours"]),
+    )
+    fallback = PROVIDER_FACTORIES[str(fallback_name)](fallback_config)
+    return FailoverProvider(primary, fallback)
+
+
+build_provider.provider_name = "provider"
+
+
+def provider_result_payload(provider: MarketDataProvider, config: ProviderConfig) -> dict[str, object | None]:
+    serialized = serialize_provider_config(config)
+    resolved_provider_name = getattr(provider, "resolved_provider_name", None) or getattr(provider, "provider_name", None)
+    if isinstance(resolved_provider_name, str):
+        try:
+            resolved_provider_name = normalize_provider_name(resolved_provider_name)
+        except ValueError:
+            resolved_provider_name = resolved_provider_name.strip().lower() or None
+    return {
+        "provider_name": serialized["provider_name"],
+        "fallback_provider_name": serialized["fallback_provider_name"],
+        "resolved_provider_name": resolved_provider_name,
+        "fallback_used": bool(getattr(provider, "fallback_used", False)),
+        "supports_historical_fundamentals": bool(getattr(provider, "supports_historical_fundamentals", False)),
+    }
+
+
+def provider_health_payload(
+    config: ProviderConfig | None = None,
+    *,
+    probe: bool = False,
+) -> dict[str, object]:
+    requested_config = config or ProviderConfig()
+    serialized_request = serialize_provider_config(requested_config)
+    providers: list[dict[str, object | None]] = []
+    for descriptor in list_provider_descriptors():
+        provider_name = str(descriptor["key"])
+        health_config = ProviderConfig(
+            provider_name=provider_name,
+            use_cache=requested_config.use_cache,
+            refresh_cache=requested_config.refresh_cache,
+            cache_ttl_hours=requested_config.cache_ttl_hours,
+        )
+        try:
+            health = PROVIDER_FACTORIES[provider_name](health_config).check_health(probe=probe)
+        except ProviderConfigurationError as exc:
+            health = ProviderHealth(
+                provider_name=provider_name,
+                state="unconfigured",
+                detail=str(exc),
+                supports_historical_fundamentals=bool(descriptor["supports_historical_fundamentals"]),
+            )
+        except Exception as exc:
+            health = ProviderHealth(
+                provider_name=provider_name,
+                state="error",
+                detail=str(exc),
+                supports_historical_fundamentals=bool(descriptor["supports_historical_fundamentals"]),
+            )
+        providers.append(
+            {
+                **descriptor,
+                "state": health.state,
+                "detail": health.detail,
+                "configured_default": provider_name == serialized_request["provider_name"],
+                "configured_fallback": provider_name == serialized_request["fallback_provider_name"],
+            }
+        )
+    return {
+        "default_provider": serialized_request["provider_name"],
+        "fallback_provider": serialized_request["fallback_provider_name"],
+        "providers": providers,
+    }
+
+
 def normalize_payload(value: object) -> object | None:
     if value is None:
         return None
@@ -198,7 +403,7 @@ class ScreenService:
     def __init__(
         self,
         *,
-        provider_factory: ProviderFactory = build_yahoo_provider,
+        provider_factory: ProviderFactory = build_provider,
         universe_service: UniverseService | None = None,
         engine_factory: EngineFactory = MagicFormulaEngine,
     ) -> None:
@@ -232,7 +437,7 @@ class BacktestService:
     def __init__(
         self,
         *,
-        provider_factory: ProviderFactory = build_yahoo_provider,
+        provider_factory: ProviderFactory = build_provider,
         universe_service: UniverseService | None = None,
         backtester_factory: BacktesterFactory = MagicFormulaBacktester,
     ) -> None:
@@ -268,3 +473,41 @@ class BacktestService:
             review_target_rows=frame_to_records(review_targets_frame),
             final_holding_rows=frame_to_records(final_holdings_frame),
         )
+
+
+def _coerce_string(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _coerce_bool(value: object, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default
+
+
+def _coerce_float(value: object, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default

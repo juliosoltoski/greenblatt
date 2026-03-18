@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.providers import provider_config_from_request_payload
 from apps.backtests.models import (
     BacktestEquityPoint,
     BacktestFinalHolding,
@@ -17,6 +18,7 @@ from apps.backtests.models import (
     BacktestRun,
     BacktestTrade,
 )
+from apps.jobs.errors import ProviderBuildError, wrap_provider_runtime_error
 from apps.jobs.models import JobRun
 from apps.jobs.services import JobService
 from apps.universes.models import Universe
@@ -28,7 +30,9 @@ from greenblatt.services import (
     BacktestService as CoreBacktestService,
     ProviderConfig,
     UniverseRequest,
-    build_yahoo_provider,
+    build_provider,
+    provider_result_payload,
+    serialize_provider_config,
 )
 
 
@@ -53,6 +57,8 @@ class BacktestLaunchRequest:
     use_cache: bool
     refresh_cache: bool
     cache_ttl_hours: float
+    provider_name: str | None = None
+    fallback_provider_name: str | None = None
 
 
 class BacktestRunService:
@@ -66,10 +72,19 @@ class BacktestRunService:
     ) -> None:
         self.job_service = job_service or JobService()
         self.artifact_storage = artifact_storage or ArtifactStorage()
-        self.provider_factory = provider_factory or build_yahoo_provider
+        self.provider_factory = provider_factory or build_provider
         self.core_backtest_service_class = core_backtest_service_class or CoreBacktestService
 
     def launch_backtest(self, request: BacktestLaunchRequest) -> BacktestRun:
+        provider_config = provider_config_from_request_payload(
+            {
+                "provider_name": request.provider_name,
+                "fallback_provider_name": request.fallback_provider_name,
+            },
+            use_cache=request.use_cache,
+            refresh_cache=request.refresh_cache,
+            cache_ttl_hours=request.cache_ttl_hours,
+        )
         with transaction.atomic():
             job = self.job_service.create_job(
                 workspace=request.workspace,
@@ -90,6 +105,7 @@ class BacktestRunService:
                         "use_cache": request.use_cache,
                         "refresh_cache": request.refresh_cache,
                         "cache_ttl_hours": request.cache_ttl_hours,
+                        "provider": serialize_provider_config(provider_config),
                     }
                 },
                 current_step="Queued for backtesting",
@@ -189,7 +205,11 @@ class BacktestRunService:
             )
             active_job.refresh_from_db()
 
-        provider_config = ProviderConfig(
+        request_metadata = active_job.metadata.get("request", {}) if isinstance(active_job.metadata, dict) else {}
+        if not isinstance(request_metadata, dict):
+            request_metadata = {}
+        provider_config = provider_config_from_request_payload(
+            request_metadata.get("provider") if isinstance(request_metadata.get("provider"), dict) else None,
             use_cache=backtest_run.use_cache,
             refresh_cache=backtest_run.refresh_cache,
             cache_ttl_hours=backtest_run.cache_ttl_hours,
@@ -219,8 +239,24 @@ class BacktestRunService:
             )
             active_job.refresh_from_db()
 
-        provider = self.provider_factory(provider_config)
-        response = self.core_backtest_service_class(provider_factory=self.provider_factory).run(request, provider=provider)
+        provider_name = provider_config.provider_name
+        try:
+            provider = self.provider_factory(provider_config)
+        except Exception as exc:
+            raise ProviderBuildError(
+                f"Failed to initialize market data provider '{provider_name}': {exc}",
+                provider_name=provider_name,
+                workflow="backtest",
+            ) from exc
+
+        try:
+            response = self.core_backtest_service_class(provider_factory=self.provider_factory).run(request, provider=provider)
+        except Exception as exc:
+            wrapped = wrap_provider_runtime_error(exc, provider_name=provider_name, workflow="backtest")
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
+        provider_info = provider_result_payload(provider, provider_config)
 
         if task is not None:
             task.update_progress(
@@ -243,7 +279,7 @@ class BacktestRunService:
         trades = self._build_trades(backtest_run, response.trade_rows)
         review_targets = self._build_review_targets(backtest_run, response.review_target_rows)
         final_holdings = self._build_final_holdings(backtest_run, response.final_holding_rows)
-        summary = self._build_summary(backtest_run, response, export_filename)
+        summary = self._build_summary(backtest_run, response, export_filename, provider_info)
 
         with transaction.atomic():
             BacktestEquityPoint.objects.filter(backtest_run=backtest_run).delete()
@@ -296,6 +332,7 @@ class BacktestRunService:
             "review_target_count": len(review_targets),
             "final_holding_count": len(final_holdings),
             "export_filename": export_filename,
+            "provider": provider_info,
         }
 
     def export_path(self, backtest_run: BacktestRun):
@@ -384,7 +421,12 @@ class BacktestRunService:
         ]
 
     @staticmethod
-    def _build_summary(backtest_run: BacktestRun, response, export_filename: str) -> dict[str, object]:
+    def _build_summary(
+        backtest_run: BacktestRun,
+        response,
+        export_filename: str,
+        provider_info: dict[str, object | None],
+    ) -> dict[str, object]:
         summary = {
             **response.summary_payload,
             "universe_name": backtest_run.universe.name,
@@ -399,6 +441,7 @@ class BacktestRunService:
             "final_holding_count": len(response.final_holding_rows),
             "trade_summary": response.trade_summary_rows,
             "export_filename": export_filename,
+            "provider": provider_info,
         }
         return summary
 
@@ -427,4 +470,3 @@ def _as_int(value) -> int | None:
     if value is None or value == "":
         return None
     return int(value)
-

@@ -20,6 +20,8 @@ def serialize_job(job: JobRun) -> dict[str, object | None]:
         "metadata": job.metadata,
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+        "queue_latency_seconds": job.queue_latency_seconds,
+        "run_duration_seconds": job.run_duration_seconds,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
         "is_terminal": job.is_terminal,

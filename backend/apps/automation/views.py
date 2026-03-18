@@ -6,6 +6,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.throttling import LaunchRateThrottle, MethodScopedThrottleMixin
 from apps.automation.models import AlertRule, NotificationEvent, RunSchedule
 from apps.automation.presenters import serialize_alert_rule, serialize_notification_event, serialize_run_schedule
 from apps.automation.serializers import (
@@ -77,8 +78,11 @@ def _notification_queryset(user):
     )
 
 
-class RunScheduleListCreateView(APIView):
+class RunScheduleListCreateView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "POST": [LaunchRateThrottle],
+    }
 
     def get(self, request):
         serializer = RunScheduleListSerializer(data=request.query_params)
@@ -132,8 +136,12 @@ class RunScheduleListCreateView(APIView):
         return Response(serialize_run_schedule(schedule), status=status.HTTP_201_CREATED)
 
 
-class RunScheduleDetailView(APIView):
+class RunScheduleDetailView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "PATCH": [LaunchRateThrottle],
+        "DELETE": [LaunchRateThrottle],
+    }
 
     def get(self, request, schedule_id: int):
         schedule = get_object_or_404(_schedule_queryset(request.user), pk=schedule_id)
@@ -174,8 +182,11 @@ class RunScheduleDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class RunScheduleTriggerView(APIView):
+class RunScheduleTriggerView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "POST": [LaunchRateThrottle],
+    }
 
     def post(self, request, schedule_id: int):
         schedule = get_object_or_404(_schedule_queryset(request.user), pk=schedule_id)
@@ -187,8 +198,11 @@ class RunScheduleTriggerView(APIView):
         return Response({"workflow_kind": "backtest", "run": serialize_backtest_run(run)}, status=response_status)
 
 
-class AlertRuleListCreateView(APIView):
+class AlertRuleListCreateView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "POST": [LaunchRateThrottle],
+    }
 
     def get(self, request):
         serializer = AlertRuleListSerializer(data=request.query_params)
@@ -242,8 +256,12 @@ class AlertRuleListCreateView(APIView):
         return Response(serialize_alert_rule(rule), status=status.HTTP_201_CREATED)
 
 
-class AlertRuleDetailView(APIView):
+class AlertRuleDetailView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "PATCH": [LaunchRateThrottle],
+        "DELETE": [LaunchRateThrottle],
+    }
 
     def get(self, request, rule_id: int):
         rule = get_object_or_404(_alert_rule_queryset(request.user), pk=rule_id)

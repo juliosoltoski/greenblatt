@@ -7,6 +7,11 @@
     reverse_proxy backend:8000
   }
 
+  @metrics path /metrics /metrics/*
+  handle @metrics {
+    reverse_proxy backend:8000
+  }
+
   @admin path /admin /admin/*
   handle @admin {
     redir http://localhost:8000{uri}

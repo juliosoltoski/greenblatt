@@ -1,10 +1,11 @@
 from django.contrib import admin
 
+from apps.core.admin import ReadOnlyAdminMixin
 from apps.jobs.models import JobRun
 
 
 @admin.register(JobRun)
-class JobRunAdmin(admin.ModelAdmin):
+class JobRunAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = [
         "id",
         "job_type",

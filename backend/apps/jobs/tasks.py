@@ -8,6 +8,8 @@ from typing import Any, Callable
 from celery import Task, shared_task
 from django.utils import timezone
 
+from apps.core.context import clear_observability_context, set_observability_context
+from apps.jobs.errors import provider_failure_metadata
 from apps.jobs.models import JobRun
 from apps.jobs.retries import RetryableJobError, error_code_for_exception, is_retryable_exception, merge_metadata, next_retry_delay_seconds
 
@@ -43,6 +45,14 @@ class TrackedJobTask(Task):
         return JobRun.objects.get(pk=job_run_id)
 
     def _mark_running(self, job: JobRun) -> None:
+        set_observability_context(
+            request_id=str(job.metadata.get("request_id") or ""),
+            correlation_id=str(job.metadata.get("correlation_id") or ""),
+            job_id=job.id,
+            task_id=self.request.id,
+            workspace_id=job.workspace_id,
+            user_id=job.created_by_id,
+        )
         if not job.started_at:
             job.started_at = timezone.now()
         if not job.celery_task_id:
@@ -78,17 +88,21 @@ class TrackedJobTask(Task):
         job.error_code = error_code_for_exception(exc)
         job.error_message = str(exc)
         job.finished_at = timezone.now()
+        provider_failure = provider_failure_metadata(exc)
+        metadata_updates = {
+            "last_error": {
+                "code": job.error_code,
+                "message": job.error_message,
+                "retryable": False,
+                "exception_type": exc.__class__.__name__,
+                "traceback": traceback.format_exc(),
+            }
+        }
+        if provider_failure is not None:
+            metadata_updates["provider_failure"] = provider_failure
         job.metadata = merge_metadata(
             job.metadata,
-            {
-                "last_error": {
-                    "code": job.error_code,
-                    "message": job.error_message,
-                    "retryable": False,
-                    "exception_type": exc.__class__.__name__,
-                    "traceback": traceback.format_exc(),
-                }
-            },
+            metadata_updates,
         )
         self._save_job(job, "state", "error_code", "error_message", "finished_at", "metadata")
 
@@ -134,6 +148,8 @@ def _run_with_tracking(task: TrackedJobTask, job_run_id: int, work: Callable[[Jo
         task._mark_failed(job, exc)
         logger.exception("Job %s failed", job.pk)
         raise
+    finally:
+        clear_observability_context()
 
     task._mark_succeeded(job, result)
     return result

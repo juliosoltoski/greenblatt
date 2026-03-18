@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.jobs.models import JobRun
 from apps.jobs.retries import RetryableJobError, error_code_for_exception, is_retryable_exception, next_retry_delay_seconds
@@ -99,6 +99,8 @@ class JobApiTests(TestCase):
         self.assertEqual(payload["state"], JobRun.State.QUEUED)
         self.assertEqual(payload["job_type"], "smoke_test")
         self.assertEqual(payload["celery_task_id"], "task-123")
+        self.assertTrue(payload["metadata"]["correlation_id"])
+        self.assertTrue(payload["metadata"]["request_id"])
 
         detail = self.client.get(f"/api/v1/jobs/{payload['id']}/")
         self.assertEqual(detail.status_code, 200)
@@ -107,6 +109,26 @@ class JobApiTests(TestCase):
         listing = self.client.get(f"/api/v1/jobs/?workspace_id={self.workspace.id}")
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(len(listing.json()["results"]), 1)
+
+    @override_settings(WORKSPACE_MAX_CONCURRENT_SMOKE_JOBS=1)
+    def test_workspace_concurrency_limit_rejects_additional_smoke_jobs(self) -> None:
+        JobRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="smoke_test",
+            state=JobRun.State.QUEUED,
+            progress_percent=0,
+            current_step="Queued",
+        )
+
+        response = self.client.post(
+            "/api/v1/jobs/smoke/",
+            data={"workspace_id": self.workspace.id, "step_count": 2, "step_delay_ms": 10, "failure_mode": "success"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Workspace smoke-test concurrency limit reached", response.json()["detail"])
 
     def test_viewer_cannot_launch_job(self) -> None:
         owner = User.objects.create_user(username="owner", password="secret-pass-123")

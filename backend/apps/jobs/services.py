@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import uuid4
 
 from django.utils import timezone
 
+from apps.core.context import current_correlation_id, current_request_id
+from apps.jobs.limits import enforce_workspace_job_limits
 from apps.jobs.models import JobRun
 from apps.jobs.tasks import run_smoke_job
 from apps.workspaces.models import Workspace
@@ -32,6 +35,9 @@ class JobService:
         metadata: dict[str, object] | None = None,
         current_step: str = "Queued",
     ) -> JobRun:
+        enforce_workspace_job_limits(workspace=workspace, job_type=job_type)
+        correlation_id = current_correlation_id() or uuid4().hex
+        request_id = current_request_id()
         return JobRun.objects.create(
             workspace=workspace,
             created_by=created_by,
@@ -39,7 +45,11 @@ class JobService:
             state=JobRun.State.QUEUED,
             progress_percent=0,
             current_step=current_step,
-            metadata=metadata or {},
+            metadata={
+                **(metadata or {}),
+                "request_id": request_id,
+                "correlation_id": correlation_id,
+            },
         )
 
     def launch_smoke_job(self, request: SmokeJobRequest) -> JobRun:

@@ -9,6 +9,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.throttling import ExportRateThrottle, LaunchRateThrottle, MethodScopedThrottleMixin
 from apps.screens.models import ScreenExclusion, ScreenResultRow, ScreenRun
 from apps.screens.presenters import (
     serialize_screen_exclusion,
@@ -62,8 +63,11 @@ def _paginate_queryset(queryset, *, page: int, page_size: int):
     return paginator, page_obj
 
 
-class ScreenListCreateView(APIView):
+class ScreenListCreateView(MethodScopedThrottleMixin, APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes_by_method = {
+        "POST": [LaunchRateThrottle],
+    }
 
     def get(self, request):
         serializer = ScreenRunListSerializer(data=request.query_params)
@@ -126,6 +130,8 @@ class ScreenListCreateView(APIView):
                 use_cache=serializer.validated_data["use_cache"],
                 refresh_cache=serializer.validated_data["refresh_cache"],
                 cache_ttl_hours=serializer.validated_data["cache_ttl_hours"],
+                provider_name=serializer.validated_data.get("provider_name"),
+                fallback_provider_name=serializer.validated_data.get("fallback_provider_name"),
             )
         )
         response_status = (
@@ -204,6 +210,7 @@ class ScreenExclusionListView(APIView):
 
 class ScreenExportDownloadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ExportRateThrottle]
 
     def get(self, request, screen_run_id: int):
         screen_run = get_object_or_404(_screen_queryset(request.user), pk=screen_run_id)
@@ -217,6 +224,7 @@ class ScreenExportDownloadView(APIView):
 
 class ScreenJsonExportView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [ExportRateThrottle]
 
     def get(self, request, screen_run_id: int):
         screen_run = get_object_or_404(_screen_queryset(request.user), pk=screen_run_id)

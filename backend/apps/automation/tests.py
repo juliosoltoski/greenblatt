@@ -181,7 +181,7 @@ class AutomationApiTests(TestCase):
         self.assertEqual(notifications.status_code, 200)
         self.assertEqual(notifications.json()["count"], 0)
 
-    @patch("apps.screens.services.build_yahoo_provider")
+    @patch("apps.screens.services.build_provider")
     def test_successful_screen_dispatch_sends_schedule_and_alert_notifications(self, provider_factory) -> None:
         provider_factory.return_value = FakeProvider(
             [

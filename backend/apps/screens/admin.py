@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.core.admin import ReadOnlyAdminMixin
 from apps.screens.models import ScreenExclusion, ScreenResultRow, ScreenRun
 
 
@@ -30,7 +31,7 @@ class ScreenExclusionInline(admin.TabularInline):
 
 
 @admin.register(ScreenRun)
-class ScreenRunAdmin(admin.ModelAdmin):
+class ScreenRunAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = [
         "id",
         "workspace",
@@ -61,7 +62,7 @@ class ScreenRunAdmin(admin.ModelAdmin):
 
 
 @admin.register(ScreenResultRow)
-class ScreenResultRowAdmin(admin.ModelAdmin):
+class ScreenResultRowAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ["screen_run", "position", "ticker", "final_score", "return_on_capital", "earnings_yield"]
     list_filter = ["screen_run__workspace"]
     search_fields = ["ticker", "company_name", "screen_run__id"]
@@ -70,10 +71,9 @@ class ScreenResultRowAdmin(admin.ModelAdmin):
 
 
 @admin.register(ScreenExclusion)
-class ScreenExclusionAdmin(admin.ModelAdmin):
+class ScreenExclusionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ["screen_run", "ticker", "reason"]
     list_filter = ["screen_run__workspace", "reason"]
     search_fields = ["ticker", "reason", "screen_run__id"]
     autocomplete_fields = ["screen_run"]
     readonly_fields = [field.name for field in ScreenExclusion._meta.fields]
-

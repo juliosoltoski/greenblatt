@@ -5,6 +5,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.throttling import LaunchRateThrottle
 from apps.jobs.models import JobRun
 from apps.jobs.presenters import serialize_job
 from apps.jobs.serializers import SmokeJobLaunchSerializer
@@ -41,6 +42,7 @@ class JobDetailView(APIView):
 
 class SmokeJobLaunchView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = [LaunchRateThrottle]
 
     def post(self, request):
         serializer = SmokeJobLaunchSerializer(data=request.data)

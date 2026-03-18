@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.core.admin import ReadOnlyAdminMixin
 from apps.backtests.models import (
     BacktestEquityPoint,
     BacktestFinalHolding,
@@ -39,7 +40,7 @@ class BacktestFinalHoldingInline(admin.TabularInline):
 
 
 @admin.register(BacktestRun)
-class BacktestRunAdmin(admin.ModelAdmin):
+class BacktestRunAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = [
         "id",
         "workspace",
@@ -72,7 +73,7 @@ class BacktestRunAdmin(admin.ModelAdmin):
 
 
 @admin.register(BacktestEquityPoint)
-class BacktestEquityPointAdmin(admin.ModelAdmin):
+class BacktestEquityPointAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ["backtest_run", "position", "date", "equity", "benchmark_equity", "positions"]
     search_fields = ["backtest_run__id"]
     autocomplete_fields = ["backtest_run"]
@@ -80,7 +81,7 @@ class BacktestEquityPointAdmin(admin.ModelAdmin):
 
 
 @admin.register(BacktestTrade)
-class BacktestTradeAdmin(admin.ModelAdmin):
+class BacktestTradeAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ["backtest_run", "position", "date", "ticker", "side", "shares", "price", "reason"]
     list_filter = ["side", "reason", "backtest_run__workspace"]
     search_fields = ["ticker", "reason", "backtest_run__id"]
@@ -89,7 +90,7 @@ class BacktestTradeAdmin(admin.ModelAdmin):
 
 
 @admin.register(BacktestReviewTarget)
-class BacktestReviewTargetAdmin(admin.ModelAdmin):
+class BacktestReviewTargetAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ["backtest_run", "date", "target_rank", "ticker", "final_score"]
     list_filter = ["backtest_run__workspace"]
     search_fields = ["ticker", "backtest_run__id"]
@@ -98,10 +99,9 @@ class BacktestReviewTargetAdmin(admin.ModelAdmin):
 
 
 @admin.register(BacktestFinalHolding)
-class BacktestFinalHoldingAdmin(admin.ModelAdmin):
+class BacktestFinalHoldingAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = ["backtest_run", "position", "ticker", "shares", "entry_date", "entry_price", "score"]
     list_filter = ["backtest_run__workspace"]
     search_fields = ["ticker", "backtest_run__id"]
     autocomplete_fields = ["backtest_run"]
     readonly_fields = [field.name for field in BacktestFinalHolding._meta.fields]
-

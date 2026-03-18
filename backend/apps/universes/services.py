@@ -12,10 +12,12 @@ from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.providers import default_provider_config, provider_config_from_request_payload
 from apps.universes.models import Universe, UniverseEntry, UniverseUpload
 from apps.workspaces.models import Workspace
 from greenblatt.providers.base import MarketDataProvider
 from greenblatt.providers.yahoo import YahooFinanceProvider
+from greenblatt.services import ProviderConfig, build_provider
 from greenblatt.universe import list_profiles, resolve_profile
 
 
@@ -220,13 +222,19 @@ def parse_uploaded_ticker_file(upload_file: UploadedFile) -> tuple[list[ParsedTi
     return parse_ticker_text(text), raw_bytes
 
 
-def resolve_builtin_profile_tickers(profile_key: str) -> list[ParsedTicker]:
+def resolve_builtin_profile_tickers(profile_key: str, *, provider_config: ProviderConfig | None = None) -> list[ParsedTicker]:
     profile_index = {profile.key: profile for profile in list_profiles()}
     if profile_key not in profile_index:
         raise UniverseInputError("Unknown built-in universe profile.", [f"Unknown profile key: {profile_key}"])
 
     if profile_key == "us_top_3000":
-        provider: MarketDataProvider = YahooFinanceProvider()
+        try:
+            provider = build_provider(provider_config or default_provider_config())
+        except Exception as exc:
+            raise UniverseInputError(
+                "Unable to initialize the configured market data provider.",
+                [str(exc)],
+            ) from exc
     else:
         provider = _StaticProfileProvider()
 
@@ -264,6 +272,8 @@ class UniverseManagerService:
         profile_key: str | None = None,
         manual_tickers: str | None = None,
         upload_file: UploadedFile | None = None,
+        provider_name: str | None = None,
+        fallback_provider_name: str | None = None,
     ) -> Universe:
         with transaction.atomic():
             entries, upload = self._prepare_source_payload(
@@ -273,6 +283,8 @@ class UniverseManagerService:
                 profile_key=profile_key,
                 manual_tickers=manual_tickers,
                 upload_file=upload_file,
+                provider_name=provider_name,
+                fallback_provider_name=fallback_provider_name,
             )
             universe = Universe.objects.create(
                 workspace=workspace,
@@ -299,6 +311,8 @@ class UniverseManagerService:
         profile_key: str | None = None,
         manual_tickers: str | None = None,
         upload_file: UploadedFile | None = None,
+        provider_name: str | None = None,
+        fallback_provider_name: str | None = None,
         source_changed: bool = False,
     ) -> Universe:
         if name is not None:
@@ -316,6 +330,8 @@ class UniverseManagerService:
                     profile_key=profile_key or universe.profile_key or None,
                     manual_tickers=manual_tickers,
                     upload_file=upload_file,
+                    provider_name=provider_name,
+                    fallback_provider_name=fallback_provider_name,
                 )
                 universe.source_type = resolved_source_type
                 universe.profile_key = (profile_key or "") if resolved_source_type == Universe.SourceType.BUILT_IN else ""
@@ -338,9 +354,20 @@ class UniverseManagerService:
         profile_key: str | None,
         manual_tickers: str | None,
         upload_file: UploadedFile | None,
+        provider_name: str | None,
+        fallback_provider_name: str | None,
     ) -> tuple[list[ParsedTicker], UniverseUpload | None]:
         if source_type == Universe.SourceType.BUILT_IN:
-            return resolve_builtin_profile_tickers(profile_key or ""), None
+            provider_config = provider_config_from_request_payload(
+                {
+                    "provider_name": provider_name,
+                    "fallback_provider_name": fallback_provider_name,
+                },
+                use_cache=True,
+                refresh_cache=False,
+                cache_ttl_hours=24.0,
+            )
+            return resolve_builtin_profile_tickers(profile_key or "", provider_config=provider_config), None
 
         if source_type == Universe.SourceType.MANUAL:
             return parse_ticker_text(manual_tickers or ""), None

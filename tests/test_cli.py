@@ -5,7 +5,7 @@ from datetime import date
 
 import pandas as pd
 
-from greenblatt.cli import _build_backtest_request, _build_screen_request, _run_screen
+from greenblatt.cli import _build_backtest_request, _build_screen_request, _run_providers, _run_screen
 from greenblatt.models import BacktestResult, ScreenResult
 from greenblatt.services import BacktestResponse, ResolvedUniverse, ScreenResponse
 
@@ -23,6 +23,8 @@ def test_build_screen_request_translates_args() -> None:
         cache_ttl_hours=48.0,
         refresh_cache=True,
         no_cache=False,
+        provider="alpha_vantage",
+        fallback_provider="yahoo",
     )
 
     request = _build_screen_request(args)
@@ -34,6 +36,8 @@ def test_build_screen_request_translates_args() -> None:
     assert request.config.sector_allowlist == {"Technology", "Healthcare"}
     assert request.provider.cache_ttl_hours == 48.0
     assert request.provider.refresh_cache is True
+    assert request.provider.provider_name == "alpha_vantage"
+    assert request.provider.fallback_provider_name == "yahoo"
 
 
 def test_build_backtest_request_translates_args() -> None:
@@ -53,6 +57,8 @@ def test_build_backtest_request_translates_args() -> None:
         cache_ttl_hours=24.0,
         refresh_cache=False,
         no_cache=True,
+        provider="yahoo",
+        fallback_provider=None,
     )
 
     request = _build_backtest_request(args)
@@ -66,6 +72,7 @@ def test_build_backtest_request_translates_args() -> None:
     assert request.config.momentum_mode == "filter"
     assert request.config.sector_allowlist == {"Technology"}
     assert request.provider.use_cache is False
+    assert request.provider.provider_name == "yahoo"
 
 
 def test_run_screen_uses_screen_service(monkeypatch, capsys) -> None:
@@ -124,6 +131,8 @@ def test_run_screen_uses_screen_service(monkeypatch, capsys) -> None:
         cache_ttl_hours=24.0,
         refresh_cache=False,
         no_cache=False,
+        provider="yahoo",
+        fallback_provider=None,
         output=None,
         exclusions_output=None,
     )
@@ -133,3 +142,12 @@ def test_run_screen_uses_screen_service(monkeypatch, capsys) -> None:
 
     assert captured["request"].universe.profile == "us_top_3000"
     assert "AAA" in output
+
+
+def test_run_providers_lists_descriptors(capsys) -> None:
+    _run_providers(argparse.Namespace())
+
+    output = capsys.readouterr().out
+
+    assert "yahoo:" in output
+    assert "alpha_vantage:" in output

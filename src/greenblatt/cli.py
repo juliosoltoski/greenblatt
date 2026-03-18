@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from greenblatt.models import BacktestConfig, ScreenConfig
-from greenblatt.services import BacktestRequest, BacktestService, ProviderConfig, ScreenRequest, ScreenService, UniverseRequest, UniverseService
+from greenblatt.services import (
+    BacktestRequest,
+    BacktestService,
+    ProviderConfig,
+    ScreenRequest,
+    ScreenService,
+    UniverseRequest,
+    UniverseService,
+    list_provider_descriptors,
+)
 from greenblatt.utils import parse_date
 
 
@@ -15,6 +25,9 @@ def main() -> None:
 
     universes_parser = subparsers.add_parser("universes", help="List built-in universe profiles")
     universes_parser.set_defaults(func=_run_universes)
+
+    providers_parser = subparsers.add_parser("providers", help="List available market data providers")
+    providers_parser.set_defaults(func=_run_providers)
 
     screen_parser = subparsers.add_parser("screen", help="Run a current Magic Formula screen")
     _add_universe_arguments(screen_parser)
@@ -33,6 +46,7 @@ def main() -> None:
     screen_parser.add_argument("--sector", help="Optional sector allowlist, comma separated")
     screen_parser.add_argument("--min-market-cap", type=float, help="Minimum market cap filter")
     _add_cache_arguments(screen_parser)
+    _add_provider_arguments(screen_parser)
     screen_parser.add_argument("--output", help="Write ranked screen results to CSV")
     screen_parser.add_argument("--exclusions-output", help="Write excluded tickers to CSV")
     screen_parser.set_defaults(func=_run_screen)
@@ -58,6 +72,7 @@ def main() -> None:
     simulate_parser.add_argument("--min-market-cap", type=float, help="Minimum market cap filter")
     simulate_parser.add_argument("--benchmark", default="^GSPC", help="Benchmark ticker")
     _add_cache_arguments(simulate_parser)
+    _add_provider_arguments(simulate_parser)
     simulate_parser.add_argument("--output", required=True, help="Directory for equity curve, trades, and summary")
     simulate_parser.set_defaults(func=_run_simulate)
 
@@ -71,6 +86,13 @@ def main() -> None:
 def _run_universes(_: argparse.Namespace) -> None:
     for profile in UniverseService().list_profiles():
         print(f"{profile.key}: {profile.description} [{profile.source}]")
+
+
+def _run_providers(_: argparse.Namespace) -> None:
+    for descriptor in list_provider_descriptors():
+        credential_note = " (API key required)" if descriptor["requires_credentials"] else ""
+        print(f"{descriptor['key']}: {descriptor['label']}{credential_note}")
+        print(f"  {descriptor['description']}")
 
 
 def _run_screen(args: argparse.Namespace) -> None:
@@ -171,6 +193,22 @@ def _add_cache_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_provider_arguments(parser: argparse.ArgumentParser) -> None:
+    provider_choices = [str(descriptor["key"]) for descriptor in list_provider_descriptors()]
+    parser.add_argument(
+        "--provider",
+        choices=provider_choices,
+        default=_default_provider_name(),
+        help="Market data provider to use for this run",
+    )
+    parser.add_argument(
+        "--fallback-provider",
+        choices=provider_choices,
+        default=_default_fallback_provider_name(),
+        help="Optional fallback provider used only if the primary provider fails",
+    )
+
+
 def _build_universe_request(args: argparse.Namespace) -> UniverseRequest:
     if getattr(args, "profile", None):
         return UniverseRequest(profile=args.profile, candidate_limit=getattr(args, "candidate_limit", None))
@@ -190,10 +228,24 @@ def _parse_sector_allowlist(raw: str | None) -> set[str] | None:
 
 def _build_provider_config(args: argparse.Namespace) -> ProviderConfig:
     return ProviderConfig(
+        provider_name=getattr(args, "provider", None) or _default_provider_name(),
+        fallback_provider_name=getattr(args, "fallback_provider", None) or _default_fallback_provider_name(),
         use_cache=not args.no_cache,
         refresh_cache=args.refresh_cache,
         cache_ttl_hours=args.cache_ttl_hours,
     )
+
+
+def _default_provider_name() -> str:
+    raw = os.getenv("GREENBLATT_PROVIDER", "yahoo").strip().lower().replace("-", "_")
+    valid = {str(descriptor["key"]) for descriptor in list_provider_descriptors()}
+    return raw if raw in valid else "yahoo"
+
+
+def _default_fallback_provider_name() -> str | None:
+    raw = os.getenv("GREENBLATT_FALLBACK_PROVIDER", "").strip().lower().replace("-", "_")
+    valid = {str(descriptor["key"]) for descriptor in list_provider_descriptors()}
+    return raw if raw in valid else None
 
 
 if __name__ == "__main__":

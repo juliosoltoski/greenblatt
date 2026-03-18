@@ -1,5 +1,58 @@
+from dataclasses import replace
+
+import pandas as pd
+
+from greenblatt.models import SecuritySnapshot
+from greenblatt.providers.alpha_vantage import AlphaVantageProvider
+from greenblatt.providers.errors import ProviderResponseError
+from greenblatt.providers.failover import FailoverProvider
 from greenblatt.providers.yahoo import YahooFinanceProvider
 
+
+class _PrimaryFailureProvider:
+    provider_name = "primary"
+    supports_historical_fundamentals = False
+
+    def get_snapshots(self, tickers, *, as_of=None, include_momentum=True):
+        raise ProviderResponseError("primary unavailable")
+
+    def get_price_history(self, tickers, *, start, end, interval="1d", auto_adjust=False):
+        raise ProviderResponseError("primary unavailable")
+
+    def get_us_equity_candidates(self, *, limit: int = 3_000):
+        raise ProviderResponseError("primary unavailable")
+
+
+class _FallbackProvider:
+    provider_name = "fallback"
+    supports_historical_fundamentals = False
+
+    def __init__(self) -> None:
+        self.snapshots = [
+            SecuritySnapshot(
+                ticker="AAPL",
+                company_name="Apple",
+                sector="Technology",
+                industry="Hardware",
+                market_cap=1.0,
+                ebit=1.0,
+                current_assets=1.0,
+                current_liabilities=1.0,
+                cash_and_equivalents=1.0,
+                total_debt=1.0,
+                net_pp_e=1.0,
+            )
+        ]
+
+    def get_snapshots(self, tickers, *, as_of=None, include_momentum=True):
+        lookup = {snapshot.ticker: snapshot for snapshot in self.snapshots}
+        return [replace(lookup[ticker]) for ticker in tickers if ticker in lookup]
+
+    def get_price_history(self, tickers, *, start, end, interval="1d", auto_adjust=False):
+        return pd.DataFrame({"AAPL": [100.0]}, index=pd.date_range("2024-01-01", periods=1))
+
+    def get_us_equity_candidates(self, *, limit: int = 3_000):
+        return ["AAPL"][:limit]
 
 def test_rank_nasdaq_stock_rows_filters_non_equities_and_sorts_by_market_cap() -> None:
     rows = [
@@ -52,3 +105,19 @@ def test_normalize_symbol_preserves_exchange_suffixes_and_converts_us_class_shar
     assert provider._normalize_symbol("NOVO-B.CO") == "NOVO-B.CO"
     assert provider._normalize_symbol("BRK.B") == "BRK-B"
     assert provider._normalize_symbol("BF.B") == "BF-B"
+
+
+def test_alpha_vantage_provider_symbol_converts_class_shares() -> None:
+    assert AlphaVantageProvider._provider_symbol("BRK-B") == "BRK.B"
+    assert AlphaVantageProvider._provider_symbol("BF-B") == "BF.B"
+    assert AlphaVantageProvider._provider_symbol("ASML.AS") == "ASML.AS"
+
+
+def test_failover_provider_uses_fallback_on_provider_error() -> None:
+    provider = FailoverProvider(_PrimaryFailureProvider(), _FallbackProvider())
+
+    snapshots = provider.get_snapshots(["AAPL"], include_momentum=False)
+
+    assert [snapshot.ticker for snapshot in snapshots] == ["AAPL"]
+    assert provider.fallback_used is True
+    assert provider.resolved_provider_name == "fallback"

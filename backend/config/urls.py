@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import include, path
 
-from apps.core.views import api_health, live_health, ready_health
+from apps.core.views import ProviderListView, api_health, live_health, metrics_view, ready_health
 from apps.universes.views import UniverseProfileListView
 
 
@@ -11,6 +11,7 @@ urlpatterns = [
     path("api/v1/automation/", include("apps.automation.urls")),
     path("api/v1/backtests/", include("apps.backtests.urls")),
     path("api/v1/jobs/", include("apps.jobs.urls")),
+    path("api/v1/providers/", ProviderListView.as_view(), name="provider-list"),
     path("api/v1/screens/", include("apps.screens.urls")),
     path("api/v1/strategy-templates/", include("apps.strategy_templates.urls")),
     path("api/v1/universe-profiles/", UniverseProfileListView.as_view(), name="universe-profile-list"),
@@ -18,5 +19,6 @@ urlpatterns = [
     path("api/v1/workspaces/", include("apps.workspaces.urls")),
     path("health/live/", live_health, name="health-live"),
     path("health/ready/", ready_health, name="health-ready"),
+    path("metrics/", metrics_view, name="metrics"),
     path("api/health/", api_health, name="api-health"),
 ]

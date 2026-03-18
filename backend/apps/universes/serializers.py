@@ -3,6 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.universes.models import Universe
+from greenblatt.services import normalize_provider_name
 
 
 SOURCE_FIELDS = {"source_type", "profile_key", "manual_tickers", "upload_file"}
@@ -16,6 +17,8 @@ class UniverseMutationSerializer(serializers.Serializer):
     profile_key = serializers.CharField(required=False, allow_blank=False)
     manual_tickers = serializers.CharField(required=False, allow_blank=True)
     upload_file = serializers.FileField(required=False)
+    provider_name = serializers.CharField(required=False, max_length=64)
+    fallback_provider_name = serializers.CharField(required=False, max_length=64)
 
     def validate(self, attrs):
         instance: Universe | None = getattr(self, "instance", None)
@@ -55,3 +58,15 @@ class UniverseMutationSerializer(serializers.Serializer):
                     )
 
         return attrs
+
+    def validate_provider_name(self, value: str) -> str:
+        try:
+            return normalize_provider_name(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_fallback_provider_name(self, value: str) -> str:
+        try:
+            return normalize_provider_name(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc

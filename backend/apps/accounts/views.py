@@ -7,6 +7,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.throttling import LoginRateThrottle
 from apps.accounts.serializers import LoginSerializer, serialize_user
 
 
@@ -30,6 +31,7 @@ class CurrentUserView(APIView):
 class LoginView(APIView):
     authentication_classes: list[type] = []
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)

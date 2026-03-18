@@ -33,6 +33,34 @@ jobs:
       - name: Run backend tests
         run: python backend/manage.py test
 
+  backend-deploy-check:
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SECRET_KEY: ci-deploy-check-secret-value-for-greenblatt-hardening-check
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: staging.example.com
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://staging.example.com
+      DJANGO_SESSION_COOKIE_SECURE: "true"
+      DJANGO_CSRF_COOKIE_SECURE: "true"
+      DJANGO_SECURE_SSL_REDIRECT: "true"
+      DJANGO_SECURE_HSTS_SECONDS: "31536000"
+      DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS: "true"
+      DJANGO_SECURE_HSTS_PRELOAD: "true"
+      LOG_JSON: "true"
+      DJANGO_CACHE_BACKEND: locmem
+      DJANGO_CACHE_LOCATION: ci-deploy-check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+      - name: Run Django deploy checks
+        run: python backend/manage.py check --deploy --fail-level WARNING
+
   frontend-build:
     runs-on: ubuntu-latest
     steps:
@@ -51,6 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - name: Validate Compose config
         run: docker compose -f compose.yml config > /dev/null
       - name: Build Docker images

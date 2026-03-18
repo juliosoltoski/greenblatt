@@ -17,7 +17,7 @@ from curl_cffi import requests as curl_requests
 from yfinance.exceptions import YFRateLimitError
 
 from greenblatt.models import SecuritySnapshot
-from greenblatt.providers.base import MarketDataProvider
+from greenblatt.providers.base import MarketDataProvider, ProviderHealth
 from greenblatt.utils import RateLimiter, RetryError, parse_date, retry
 
 
@@ -130,6 +130,8 @@ KNOWN_YAHOO_EXCHANGE_SUFFIXES = {
 
 
 class YahooFinanceProvider(MarketDataProvider):
+    provider_name = "yahoo"
+
     def __init__(
         self,
         *,
@@ -244,6 +246,36 @@ class YahooFinanceProvider(MarketDataProvider):
             if len(ranked) >= limit:
                 break
         return ranked[:limit]
+
+    def check_health(self, *, probe: bool = False) -> ProviderHealth:
+        if not probe:
+            return ProviderHealth(
+                provider_name=self.provider_name,
+                state="ok",
+                detail="Provider is configured.",
+                supports_historical_fundamentals=self.supports_historical_fundamentals,
+            )
+        try:
+            tickers = self.get_us_equity_candidates(limit=1)
+            if tickers:
+                detail = f"Probe request succeeded with ticker {tickers[0]}."
+                state = "ok"
+            else:
+                detail = "Probe request completed without returning any candidates."
+                state = "degraded"
+        except Exception as exc:
+            return ProviderHealth(
+                provider_name=self.provider_name,
+                state="error",
+                detail=str(exc),
+                supports_historical_fundamentals=self.supports_historical_fundamentals,
+            )
+        return ProviderHealth(
+            provider_name=self.provider_name,
+            state=state,
+            detail=detail,
+            supports_historical_fundamentals=self.supports_historical_fundamentals,
+        )
 
     def _build_momentum_map(self, tickers: list[str], *, as_of: date | None = None) -> dict[str, float | None]:
         end_date = as_of or date.today()

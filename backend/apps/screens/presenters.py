@@ -6,6 +6,21 @@ from apps.universes.presenters import serialize_universe
 from apps.workspaces.presenters import serialize_workspace
 
 
+def _provider_payload(screen_run: ScreenRun) -> dict[str, object | None] | None:
+    summary = screen_run.summary if isinstance(screen_run.summary, dict) else {}
+    summary_provider = summary.get("provider")
+    if isinstance(summary_provider, dict):
+        return summary_provider
+    job_metadata = screen_run.job.metadata if isinstance(screen_run.job.metadata, dict) else {}
+    result_payload = job_metadata.get("result")
+    if isinstance(result_payload, dict) and isinstance(result_payload.get("provider"), dict):
+        return result_payload["provider"]
+    request_payload = job_metadata.get("request")
+    if isinstance(request_payload, dict) and isinstance(request_payload.get("provider"), dict):
+        return request_payload["provider"]
+    return None
+
+
 def serialize_screen_artifacts(screen_run: ScreenRun) -> list[dict[str, object | None]]:
     artifacts: list[dict[str, object | None]] = [
         {
@@ -81,6 +96,7 @@ def serialize_screen_run(screen_run: ScreenRun) -> dict[str, object | None]:
         "use_cache": screen_run.use_cache,
         "refresh_cache": screen_run.refresh_cache,
         "cache_ttl_hours": screen_run.cache_ttl_hours,
+        "provider": _provider_payload(screen_run),
         "result_count": screen_run.result_count,
         "exclusion_count": screen_run.exclusion_count,
         "resolved_ticker_count": screen_run.resolved_ticker_count,

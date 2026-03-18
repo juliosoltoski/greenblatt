@@ -4,8 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.universes.models import UniverseUpload
 
@@ -16,6 +15,7 @@ class HealthEndpointTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
+        self.assertTrue(response.headers["X-Request-ID"])
 
     @patch("apps.core.views._database_health", return_value={"ok": True, "service": "database"})
     @patch("apps.core.views._redis_health", return_value={"ok": True, "service": "redis"})
@@ -32,6 +32,23 @@ class HealthEndpointTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["status"], "degraded")
+
+    @patch("apps.core.views.metrics_content", return_value=b"# HELP greenblatt_test_metric test\n")
+    def test_metrics_endpoint_returns_prometheus_payload(self, _metrics_content) -> None:
+        response = self.client.get("/metrics/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/plain", response.headers["Content-Type"])
+        self.assertIn("greenblatt_test_metric", response.content.decode("utf-8"))
+
+    @patch("apps.core.views.metrics_content", return_value=b"# HELP greenblatt_test_metric test\n")
+    @override_settings(METRICS_AUTH_TOKEN="metrics-secret")
+    def test_metrics_endpoint_requires_auth_token_when_configured(self, _metrics_content) -> None:
+        forbidden = self.client.get("/metrics/")
+        allowed = self.client.get("/metrics/", HTTP_X_METRICS_TOKEN="metrics-secret")
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(allowed.status_code, 200)
 
 
 User = get_user_model()
@@ -68,3 +85,27 @@ class CleanupArtifactsCommandTests(TestCase):
 
             self.assertTrue(referenced_path.exists())
             self.assertFalse(orphan_path.exists())
+
+
+class ProviderApiTests(TestCase):
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(username="provider-admin", password="secret-pass-123")
+        self.client.force_login(self.user)
+
+    @patch(
+        "apps.core.views.configured_provider_health_payload",
+        return_value={
+            "default_provider": "yahoo",
+            "fallback_provider": "alpha_vantage",
+            "providers": [
+                {"key": "yahoo", "state": "ok"},
+                {"key": "alpha_vantage", "state": "unconfigured"},
+            ],
+        },
+    )
+    def test_provider_endpoint_returns_configured_health_payload(self, configured_provider_health_payload_mock) -> None:
+        response = self.client.get("/api/v1/providers/?probe=true")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["default_provider"], "yahoo")
+        configured_provider_health_payload_mock.assert_called_once_with(probe=True)

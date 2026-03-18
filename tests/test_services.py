@@ -17,10 +17,14 @@ from greenblatt.services import (
     UniverseService,
     frame_to_records,
     normalize_payload,
+    provider_config_from_payload,
+    provider_result_payload,
+    serialize_provider_config,
 )
 
 
 class FakeProvider(MarketDataProvider):
+    provider_name = "fake"
     supports_historical_fundamentals = False
 
     def __init__(self, snapshots: list[SecuritySnapshot], prices: pd.DataFrame) -> None:
@@ -169,3 +173,39 @@ def test_serialization_helpers_normalize_dates_and_missing_values() -> None:
         "when": "2024-01-07",
         "value": None,
     }
+
+
+def test_provider_config_payload_round_trips() -> None:
+    config = provider_config_from_payload(
+        {
+            "provider_name": "alpha-vantage",
+            "fallback_provider_name": "yahoo",
+            "use_cache": False,
+            "refresh_cache": True,
+            "cache_ttl_hours": "12",
+        }
+    )
+
+    assert serialize_provider_config(config) == {
+        "provider_name": "alpha_vantage",
+        "fallback_provider_name": "yahoo",
+        "use_cache": False,
+        "refresh_cache": True,
+        "cache_ttl_hours": 12.0,
+    }
+
+
+def test_provider_result_payload_uses_failover_metadata() -> None:
+    provider = FakeProvider(snapshots=[], prices=pd.DataFrame())
+    provider.fallback_used = True  # type: ignore[attr-defined]
+    provider.resolved_provider_name = "yahoo"  # type: ignore[attr-defined]
+
+    payload = provider_result_payload(
+        provider,
+        ProviderConfig(provider_name="alpha_vantage", fallback_provider_name="yahoo"),
+    )
+
+    assert payload["provider_name"] == "alpha_vantage"
+    assert payload["fallback_provider_name"] == "yahoo"
+    assert payload["resolved_provider_name"] == "yahoo"
+    assert payload["fallback_used"] is True

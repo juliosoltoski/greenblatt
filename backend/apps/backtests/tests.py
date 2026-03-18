@@ -33,6 +33,7 @@ User = get_user_model()
 
 
 class FakeProvider(MarketDataProvider):
+    provider_name = "fake"
     supports_historical_fundamentals = False
 
     def __init__(self, snapshots: list[SecuritySnapshot], prices: pd.DataFrame) -> None:
@@ -125,7 +126,7 @@ class BacktestTaskLifecycleTests(TestCase):
                     prices=make_prices(),
                 )
 
-                with patch("apps.backtests.services.build_yahoo_provider", return_value=fake_provider):
+                with patch("apps.backtests.services.build_provider", return_value=fake_provider):
                     result = run_backtest_job.apply(
                         kwargs={"job_run_id": job.id, "backtest_run_id": backtest_run.id},
                         throw=False,
@@ -139,6 +140,7 @@ class BacktestTaskLifecycleTests(TestCase):
                 self.assertGreater(backtest_run.equity_point_count, 0)
                 self.assertEqual(backtest_run.trade_count, 6)
                 self.assertEqual(backtest_run.final_holding_count, 2)
+                self.assertEqual(backtest_run.summary["provider"]["resolved_provider_name"], "fake")
                 self.assertTrue(backtest_run.has_export)
                 self.assertIn("total_return", backtest_run.summary)
                 self.assertTrue(Path(temp_dir, backtest_run.export_storage_key).exists())
@@ -154,6 +156,39 @@ class BacktestTaskLifecycleTests(TestCase):
                     self.assertIn("equity_curve.csv", names)
                     self.assertIn("trades.csv", names)
                     self.assertIn("final_holdings.csv", names)
+
+    def test_backtest_task_marks_provider_build_failures_explicitly(self) -> None:
+        job = JobService().create_job(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="backtest_run",
+            metadata={"request": {"universe_id": self.universe.id}},
+            current_step="Queued for backtesting",
+        )
+        backtest_run = BacktestRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            universe=self.universe,
+            job=job,
+            start_date=date(2024, 1, 5),
+            end_date=date(2025, 2, 14),
+            initial_capital=100000,
+            portfolio_size=2,
+            benchmark="^GSPC",
+        )
+
+        with patch("apps.backtests.services.build_provider", side_effect=RuntimeError("Yahoo bootstrap failed")):
+            result = run_backtest_job.apply(
+                kwargs={"job_run_id": job.id, "backtest_run_id": backtest_run.id},
+                throw=False,
+            )
+
+        self.assertFalse(result.successful())
+        job.refresh_from_db()
+        self.assertEqual(job.state, JobRun.State.FAILED)
+        self.assertEqual(job.error_code, "provider_build_failed")
+        self.assertEqual(job.metadata["provider_failure"]["provider_name"], "yahoo")
+        self.assertEqual(job.metadata["provider_failure"]["workflow"], "backtest")
 
 
 class BacktestApiTests(TestCase):

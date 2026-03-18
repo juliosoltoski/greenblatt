@@ -71,6 +71,8 @@ class UniverseListCreateView(APIView):
                 profile_key=serializer.validated_data.get("profile_key"),
                 manual_tickers=serializer.validated_data.get("manual_tickers"),
                 upload_file=serializer.validated_data.get("upload_file"),
+                provider_name=serializer.validated_data.get("provider_name"),
+                fallback_provider_name=serializer.validated_data.get("fallback_provider_name"),
             )
         except UniverseInputError as exc:
             return Response(
@@ -120,6 +122,8 @@ class UniverseDetailView(APIView):
                 profile_key=serializer.validated_data.get("profile_key"),
                 manual_tickers=serializer.validated_data.get("manual_tickers"),
                 upload_file=serializer.validated_data.get("upload_file"),
+                provider_name=serializer.validated_data.get("provider_name"),
+                fallback_provider_name=serializer.validated_data.get("fallback_provider_name"),
                 source_changed=source_changed,
             )
         except UniverseInputError as exc:

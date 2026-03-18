@@ -55,3 +55,15 @@ class JobRun(models.Model):
             self.State.CANCELLED,
             self.State.PARTIAL_FAILED,
         }
+
+    @property
+    def queue_latency_seconds(self) -> float | None:
+        if self.started_at is None:
+            return None
+        return max(0.0, (self.started_at - self.created_at).total_seconds())
+
+    @property
+    def run_duration_seconds(self) -> float | None:
+        if self.started_at is None or self.finished_at is None:
+            return None
+        return max(0.0, (self.finished_at - self.started_at).total_seconds())

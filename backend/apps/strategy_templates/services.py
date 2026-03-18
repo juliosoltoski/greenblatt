@@ -30,7 +30,7 @@ class StrategyTemplateDefinition:
 
 
 def screen_config_from_run(screen_run: ScreenRun) -> dict[str, object]:
-    return {
+    payload = {
         "top_n": screen_run.top_n,
         "momentum_mode": screen_run.momentum_mode,
         "sector_allowlist": screen_run.sector_allowlist,
@@ -42,10 +42,18 @@ def screen_config_from_run(screen_run: ScreenRun) -> dict[str, object]:
         "refresh_cache": screen_run.refresh_cache,
         "cache_ttl_hours": screen_run.cache_ttl_hours,
     }
+    request_payload = screen_run.job.metadata.get("request", {}) if isinstance(screen_run.job.metadata, dict) else {}
+    provider_payload = request_payload.get("provider") if isinstance(request_payload, dict) else None
+    if isinstance(provider_payload, dict):
+        if provider_payload.get("provider_name"):
+            payload["provider_name"] = provider_payload["provider_name"]
+        if provider_payload.get("fallback_provider_name"):
+            payload["fallback_provider_name"] = provider_payload["fallback_provider_name"]
+    return payload
 
 
 def backtest_config_from_run(backtest_run: BacktestRun) -> dict[str, object]:
-    return {
+    payload = {
         "start_date": backtest_run.start_date.isoformat(),
         "end_date": backtest_run.end_date.isoformat(),
         "initial_capital": backtest_run.initial_capital,
@@ -59,10 +67,18 @@ def backtest_config_from_run(backtest_run: BacktestRun) -> dict[str, object]:
         "refresh_cache": backtest_run.refresh_cache,
         "cache_ttl_hours": backtest_run.cache_ttl_hours,
     }
+    request_payload = backtest_run.job.metadata.get("request", {}) if isinstance(backtest_run.job.metadata, dict) else {}
+    provider_payload = request_payload.get("provider") if isinstance(request_payload, dict) else None
+    if isinstance(provider_payload, dict):
+        if provider_payload.get("provider_name"):
+            payload["provider_name"] = provider_payload["provider_name"]
+        if provider_payload.get("fallback_provider_name"):
+            payload["fallback_provider_name"] = provider_payload["fallback_provider_name"]
+    return payload
 
 
 def _screen_config_payload(validated_data: dict[str, object]) -> dict[str, object]:
-    return {
+    payload = {
         "top_n": validated_data["top_n"],
         "momentum_mode": validated_data["momentum_mode"],
         "sector_allowlist": validated_data.get("sector_allowlist", []),
@@ -74,10 +90,15 @@ def _screen_config_payload(validated_data: dict[str, object]) -> dict[str, objec
         "refresh_cache": validated_data["refresh_cache"],
         "cache_ttl_hours": validated_data["cache_ttl_hours"],
     }
+    if validated_data.get("provider_name"):
+        payload["provider_name"] = validated_data["provider_name"]
+    if validated_data.get("fallback_provider_name"):
+        payload["fallback_provider_name"] = validated_data["fallback_provider_name"]
+    return payload
 
 
 def _backtest_config_payload(validated_data: dict[str, object]) -> dict[str, object]:
-    return {
+    payload = {
         "start_date": validated_data["start_date"].isoformat(),
         "end_date": validated_data["end_date"].isoformat(),
         "initial_capital": validated_data["initial_capital"],
@@ -91,6 +112,11 @@ def _backtest_config_payload(validated_data: dict[str, object]) -> dict[str, obj
         "refresh_cache": validated_data["refresh_cache"],
         "cache_ttl_hours": validated_data["cache_ttl_hours"],
     }
+    if validated_data.get("provider_name"):
+        payload["provider_name"] = validated_data["provider_name"]
+    if validated_data.get("fallback_provider_name"):
+        payload["fallback_provider_name"] = validated_data["fallback_provider_name"]
+    return payload
 
 
 def normalize_template_config(workflow_kind: str, config: dict[str, object]) -> dict[str, object]:
@@ -167,6 +193,8 @@ class StrategyTemplateService:
                     use_cache=serializer.validated_data["use_cache"],
                     refresh_cache=serializer.validated_data["refresh_cache"],
                     cache_ttl_hours=serializer.validated_data["cache_ttl_hours"],
+                    provider_name=serializer.validated_data.get("provider_name"),
+                    fallback_provider_name=serializer.validated_data.get("fallback_provider_name"),
                 )
             )
             run.source_template = template
@@ -192,6 +220,8 @@ class StrategyTemplateService:
                     use_cache=serializer.validated_data["use_cache"],
                     refresh_cache=serializer.validated_data["refresh_cache"],
                     cache_ttl_hours=serializer.validated_data["cache_ttl_hours"],
+                    provider_name=serializer.validated_data.get("provider_name"),
+                    fallback_provider_name=serializer.validated_data.get("fallback_provider_name"),
                 )
             )
             run.source_template = template

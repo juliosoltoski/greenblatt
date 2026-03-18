@@ -12,6 +12,21 @@ from apps.universes.presenters import serialize_universe
 from apps.workspaces.presenters import serialize_workspace
 
 
+def _provider_payload(backtest_run: BacktestRun) -> dict[str, object | None] | None:
+    summary = backtest_run.summary if isinstance(backtest_run.summary, dict) else {}
+    summary_provider = summary.get("provider")
+    if isinstance(summary_provider, dict):
+        return summary_provider
+    job_metadata = backtest_run.job.metadata if isinstance(backtest_run.job.metadata, dict) else {}
+    result_payload = job_metadata.get("result")
+    if isinstance(result_payload, dict) and isinstance(result_payload.get("provider"), dict):
+        return result_payload["provider"]
+    request_payload = job_metadata.get("request")
+    if isinstance(request_payload, dict) and isinstance(request_payload.get("provider"), dict):
+        return request_payload["provider"]
+    return None
+
+
 def serialize_backtest_artifacts(backtest_run: BacktestRun) -> list[dict[str, object | None]]:
     artifacts: list[dict[str, object | None]] = [
         {
@@ -113,6 +128,7 @@ def serialize_backtest_run(backtest_run: BacktestRun) -> dict[str, object | None
         "use_cache": backtest_run.use_cache,
         "refresh_cache": backtest_run.refresh_cache,
         "cache_ttl_hours": backtest_run.cache_ttl_hours,
+        "provider": _provider_payload(backtest_run),
         "equity_point_count": backtest_run.equity_point_count,
         "trade_count": backtest_run.trade_count,
         "review_target_count": backtest_run.review_target_count,

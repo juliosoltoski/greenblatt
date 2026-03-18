@@ -26,6 +26,7 @@ User = get_user_model()
 
 
 class FakeProvider(MarketDataProvider):
+    provider_name = "fake"
     supports_historical_fundamentals = False
 
     def __init__(self, snapshots: list[SecuritySnapshot]) -> None:
@@ -110,7 +111,7 @@ class ScreenTaskLifecycleTests(TestCase):
                     ]
                 )
 
-                with patch("apps.screens.services.build_yahoo_provider", return_value=fake_provider):
+                with patch("apps.screens.services.build_provider", return_value=fake_provider):
                     result = run_screen_job.apply(
                         kwargs={"job_run_id": job.id, "screen_run_id": screen_run.id},
                         throw=False,
@@ -124,6 +125,7 @@ class ScreenTaskLifecycleTests(TestCase):
                 self.assertEqual(screen_run.result_count, 2)
                 self.assertEqual(screen_run.exclusion_count, 1)
                 self.assertEqual(screen_run.summary["top_tickers"], ["AAA", "BBB"])
+                self.assertEqual(screen_run.summary["provider"]["resolved_provider_name"], "fake")
                 self.assertTrue(screen_run.has_export)
                 self.assertTrue(Path(temp_dir, screen_run.export_storage_key).exists())
 
@@ -135,6 +137,36 @@ class ScreenTaskLifecycleTests(TestCase):
                 exclusions = list(ScreenExclusion.objects.filter(screen_run=screen_run))
                 self.assertEqual(exclusions[0].ticker, "ADR")
                 self.assertEqual(exclusions[0].reason, "adr excluded")
+
+    def test_screen_task_marks_provider_build_failures_explicitly(self) -> None:
+        job = JobService().create_job(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="screen_run",
+            metadata={"request": {"universe_id": self.universe.id}},
+            current_step="Queued for screening",
+        )
+        screen_run = ScreenRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            universe=self.universe,
+            job=job,
+            top_n=5,
+            momentum_mode="overlay",
+        )
+
+        with patch("apps.screens.services.build_provider", side_effect=RuntimeError("Yahoo bootstrap failed")):
+            result = run_screen_job.apply(
+                kwargs={"job_run_id": job.id, "screen_run_id": screen_run.id},
+                throw=False,
+            )
+
+        self.assertFalse(result.successful())
+        job.refresh_from_db()
+        self.assertEqual(job.state, JobRun.State.FAILED)
+        self.assertEqual(job.error_code, "provider_build_failed")
+        self.assertEqual(job.metadata["provider_failure"]["provider_name"], "yahoo")
+        self.assertEqual(job.metadata["provider_failure"]["workflow"], "screen")
 
 
 class ScreenApiTests(TestCase):
@@ -282,3 +314,28 @@ class ScreenApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    @override_settings(WORKSPACE_MAX_CONCURRENT_RESEARCH_JOBS=1)
+    def test_research_concurrency_limit_rejects_additional_screen_launches(self) -> None:
+        JobRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="backtest_run",
+            state=JobRun.State.RUNNING,
+            progress_percent=50,
+            current_step="Running",
+        )
+
+        response = self.client.post(
+            "/api/v1/screens/",
+            data={
+                "workspace_id": self.workspace.id,
+                "universe_id": self.universe.id,
+                "top_n": 25,
+                "momentum_mode": "overlay",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Workspace research concurrency limit reached", response.json()["detail"])

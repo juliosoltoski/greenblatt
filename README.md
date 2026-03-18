@@ -1,6 +1,6 @@
 # Greenblatt Magic Formula Engine
 
-Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy with Yahoo Finance data.
+Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy with pluggable market data providers.
 
 ## Features
 
@@ -8,7 +8,7 @@ Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy
 - Mandatory exclusions for financials, utilities, and ADRs.
 - Optional 6-month momentum modes: `none`, `overlay`, and `filter`.
 - Tax-aware 51/53 week sell rules for simulation.
-- Yahoo-backed provider with `curl_cffi` browser impersonation, retries, and bulk price downloads via `yfinance`.
+- Multi-provider market data layer with Yahoo Finance by default, optional Alpha Vantage support, and provider failover.
 - Built-in universe profiles for a broad US screen and several starter international watchlists.
 
 ## Installation
@@ -66,6 +66,17 @@ Each new Django user automatically gets a personal workspace and an owner member
 Email notifications default to Django's console backend in local development. To deliver real email,
 set the SMTP-related variables from [.env.example](/home/jsoltoski/greenblatt/.env.example) before starting the stack.
 
+Provider selection for the web stack is environment-driven:
+
+```bash
+MARKET_DATA_PROVIDER=yahoo
+MARKET_DATA_PROVIDER_FALLBACK=alpha_vantage
+ALPHA_VANTAGE_API_KEY=your-key-here
+```
+
+Provider status is available to authenticated users at `GET /api/v1/providers/`.
+Add `?probe=true` to run live upstream checks instead of config-only checks.
+
 To smoke-test the async job pipeline after logging in:
 
 1. Open `http://localhost:8080/app/jobs`.
@@ -110,9 +121,58 @@ docker compose -f compose.yml -f compose.dev.yml exec backend \
   python manage.py cleanup_artifacts --dry-run
 ```
 
+## Production Hardening
+
+Milestone `M9` adds the staging and production hardening layer:
+
+- structured backend and worker logs with request/job correlation ids
+- optional Sentry wiring for Django and Celery
+- Prometheus-format metrics at `GET /metrics/`
+- API throttling and per-workspace async concurrency limits
+- staging deployment, backup, smoke-test, and rollback scripts under [`infra/scripts/`](/home/jsoltoski/greenblatt/infra/scripts)
+- a staging Compose override in [`infra/compose.staging.yml`](/home/jsoltoski/greenblatt/infra/compose.staging.yml)
+- an operations runbook in [`infra/operations.md`](/home/jsoltoski/greenblatt/infra/operations.md)
+
+Metrics can be protected by setting `METRICS_AUTH_TOKEN`. When configured, send it as either:
+
+- `Authorization: Bearer <token>`
+- `X-Metrics-Token: <token>`
+
+To prepare a staging env file:
+
+```bash
+cp .env.staging.example .env.staging
+```
+
+To deploy staging from immutable images:
+
+```bash
+BACKEND_IMAGE=ghcr.io/<owner>/greenblatt-backend:<sha> \
+FRONTEND_IMAGE=ghcr.io/<owner>/greenblatt-frontend:<sha> \
+ENV_FILE=.env.staging \
+./infra/scripts/deploy_staging.sh
+```
+
+To back up or restore staging:
+
+```bash
+ENV_FILE=.env.staging ./infra/scripts/backup_postgres.sh
+ENV_FILE=.env.staging ./infra/scripts/backup_artifacts.sh
+FORCE=true ENV_FILE=.env.staging ./infra/scripts/restore_postgres.sh backups/postgres-<timestamp>.sql.gz
+FORCE=true ENV_FILE=.env.staging ./infra/scripts/restore_artifacts.sh backups/artifacts-<timestamp>.tar.gz
+```
+
+To load-test a realistic saved screen or backtest template:
+
+```bash
+docker compose -f compose.yml -f compose.dev.yml exec backend \
+  python manage.py loadtest_runs --template-id 1 --launch-count 5 --wait --poll-interval 5
+```
+
 ## Quick Start
 
 ```bash
+greenblatt providers
 greenblatt universes
 greenblatt screen --profile us_top_3000 --candidate-limit 250 --top 25 --output results/us_top_25.csv
 greenblatt simulate --profile eu_benelux_nordic --start 2024-01-01 --end 2025-12-31 --positions 10 --output results/eu_backtest
@@ -131,9 +191,10 @@ Use `greenblatt universes` to list the bundled profiles:
 
 ## CLI Overview
 
-The CLI has three commands:
+The CLI has four commands:
 
 - `greenblatt universes`: list built-in universe profiles
+- `greenblatt providers`: list available market data providers
 - `greenblatt screen`: run a current Magic Formula ranking
 - `greenblatt simulate`: run the tax-aware backtest engine
 
@@ -149,6 +210,12 @@ For `screen` and `simulate`, you must choose exactly one universe input:
 
 ```bash
 greenblatt universes
+```
+
+### List Available Providers
+
+```bash
+greenblatt providers
 ```
 
 ### Screening Examples
@@ -213,6 +280,20 @@ greenblatt screen \
   --output results/healthcare_top_20.csv \
   --exclusions-output results/healthcare_exclusions.csv
 
+# Force Alpha Vantage for a smaller watchlist screen
+greenblatt screen \
+  --tickers MSFT,AAPL,NVDA \
+  --provider alpha_vantage \
+  --top 3
+
+# Use Yahoo first and Alpha Vantage only if Yahoo fails
+greenblatt screen \
+  --profile us_top_3000 \
+  --candidate-limit 100 \
+  --provider yahoo \
+  --fallback-provider alpha_vantage \
+  --top 15
+
 # Force a live fundamentals refresh
 greenblatt screen \
   --profile us_top_3000 \
@@ -251,6 +332,15 @@ greenblatt simulate \
   --end 2025-12-31 \
   --positions 20 \
   --output results/us_backtest
+
+# Run a small backtest against Alpha Vantage data
+greenblatt simulate \
+  --tickers MSFT,AAPL,NVDA \
+  --provider alpha_vantage \
+  --start 2024-01-01 \
+  --end 2024-12-31 \
+  --positions 2 \
+  --output results/av_backtest
 
 # Use custom capital and compare against QQQ instead of the S&P 500
 greenblatt simulate \
@@ -350,5 +440,6 @@ NOVO-B.CO
 - Yahoo Finance does not provide clean point-in-time historical fundamentals. The backtester is built for rebalancing and tax logic, but live Yahoo runs use the latest available fundamentals as an approximation.
 - Enterprise value uses reported market cap, debt, minority interest, preferred stock, and a cash proxy when Yahoo does not expose excess cash separately.
 - Current fundamentals snapshots are cached locally under `~/.cache/greenblatt-magic/snapshots` by default.
+- Alpha Vantage requires `ALPHA_VANTAGE_API_KEY` and is best suited to smaller universes because its free tier is rate-limited.
 - When Yahoo is throttling or rejecting requests, reduce load with `--candidate-limit 100` or `--candidate-limit 250`, then retry later.
 - The bundled international and sector universe files are starter lists. Replace them with fuller constituent files when you want broader coverage.
