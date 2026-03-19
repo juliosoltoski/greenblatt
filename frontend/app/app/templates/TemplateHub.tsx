@@ -252,8 +252,13 @@ export function TemplateHub() {
                     <div style={titleRowStyle}>
                       <p style={sectionLabelStyle}>{template.workflow_kind}</p>
                       {template.is_starred ? <span style={starPillStyle}>Starred</span> : null}
+                      <span style={pillStyle}>{template.review_status.replaceAll("_", " ")}</span>
                     </div>
-                    <h2 style={cardTitleStyle}>{template.name}</h2>
+                    <h2 style={cardTitleStyle}>
+                      <Link href={`/app/templates/${template.id}`} style={titleLinkStyle}>
+                        {template.name}
+                      </Link>
+                    </h2>
                     <p style={metaStyle}>{template.universe.name}</p>
                   </div>
                   <span style={pillStyle}>{template.last_used_at ? "Used" : "New"}</span>
@@ -278,6 +283,9 @@ export function TemplateHub() {
                       : "manual"}
                 </p>
                 <div style={actionRowStyle}>
+                  <Link href={`/app/templates/${template.id}`} style={ghostLinkStyle}>
+                    Open
+                  </Link>
                   <Link
                     href={
                       template.workflow_kind === "screen"
@@ -397,6 +405,11 @@ const titleRowStyle: CSSProperties = {
 const cardTitleStyle: CSSProperties = {
   margin: "0.35rem 0 0",
   fontSize: "1.5rem",
+};
+
+const titleLinkStyle: CSSProperties = {
+  color: "inherit",
+  textDecoration: "none",
 };
 
 const fieldStyle: CSSProperties = {

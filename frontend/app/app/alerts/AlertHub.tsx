@@ -9,14 +9,20 @@ import {
   createAlertRule,
   deleteAlertRule,
   getCurrentUser,
+  getUserNotificationPreference,
+  getWorkspaceNotificationPreference,
   listAlertRules,
   listNotificationEvents,
   listStrategyTemplates,
   updateAlertRule,
+  updateUserNotificationPreference,
+  updateWorkspaceNotificationPreference,
   type AlertRule,
   type CurrentUser,
   type NotificationEvent,
   type StrategyTemplate,
+  type UserNotificationPreference,
+  type WorkspaceNotificationPreference,
 } from "@/lib/api";
 
 type LoadState = "loading" | "ready" | "error";
@@ -26,8 +32,10 @@ type AlertFormState = {
   description: string;
   eventType: AlertRule["event_type"];
   workflowKind: AlertRule["workflow_kind"];
+  channel: AlertRule["channel"];
   strategyTemplateId: string;
   destinationEmail: string;
+  destinationWebhookUrl: string;
   ticker: string;
   topNThreshold: string;
   isEnabled: boolean;
@@ -38,8 +46,10 @@ const initialFormState: AlertFormState = {
   description: "",
   eventType: "run_failed",
   workflowKind: "",
+  channel: "email",
   strategyTemplateId: "",
   destinationEmail: "",
+  destinationWebhookUrl: "",
   ticker: "",
   topNThreshold: "10",
   isEnabled: true,
@@ -51,12 +61,15 @@ export function AlertHub() {
   const [templates, setTemplates] = useState<StrategyTemplate[]>([]);
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
+  const [workspacePreference, setWorkspacePreference] = useState<WorkspaceNotificationPreference | null>(null);
+  const [userPreference, setUserPreference] = useState<UserNotificationPreference | null>(null);
   const [notificationStatus, setNotificationStatus] = useState<NotificationEvent["status"] | "">("");
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<AlertFormState>(initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeRuleId, setActiveRuleId] = useState<number | null>(null);
+  const [preferenceAction, setPreferenceAction] = useState<"workspace" | "user" | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -65,10 +78,18 @@ export function AlertHub() {
       try {
         const currentUser = await getCurrentUser();
         const workspaceId = currentUser.active_workspace?.id;
+        const workspacePreferencePromise = workspaceId
+          ? getWorkspaceNotificationPreference(workspaceId)
+          : Promise.resolve(null);
+        const userPreferencePromise = workspaceId ? getUserNotificationPreference(workspaceId) : Promise.resolve(null);
         const [templatePayload, rulePayload, eventPayload] = await Promise.all([
           listStrategyTemplates({ workspaceId, pageSize: 100 }),
           listAlertRules({ workspaceId, pageSize: 100 }),
           listNotificationEvents({ workspaceId, pageSize: 20, status: notificationStatus }),
+        ]);
+        const [workspacePreferencePayload, userPreferencePayload] = await Promise.all([
+          workspacePreferencePromise,
+          userPreferencePromise,
         ]);
         if (!active) {
           return;
@@ -77,6 +98,8 @@ export function AlertHub() {
         setTemplates(templatePayload.results);
         setRules(rulePayload.results);
         setEvents(eventPayload.results);
+        setWorkspacePreference(workspacePreferencePayload);
+        setUserPreference(userPreferencePayload);
         setState("ready");
       } catch (loadError) {
         if (!active) {
@@ -102,14 +125,18 @@ export function AlertHub() {
 
   async function refresh(currentUser: CurrentUser) {
     const workspaceId = currentUser.active_workspace?.id;
-    const [templatePayload, rulePayload, eventPayload] = await Promise.all([
+    const [templatePayload, rulePayload, eventPayload, workspacePreferencePayload, userPreferencePayload] = await Promise.all([
       listStrategyTemplates({ workspaceId, pageSize: 100 }),
       listAlertRules({ workspaceId, pageSize: 100 }),
       listNotificationEvents({ workspaceId, pageSize: 20, status: notificationStatus }),
+      workspaceId ? getWorkspaceNotificationPreference(workspaceId) : Promise.resolve(null),
+      workspaceId ? getUserNotificationPreference(workspaceId) : Promise.resolve(null),
     ]);
     setTemplates(templatePayload.results);
     setRules(rulePayload.results);
     setEvents(eventPayload.results);
+    setWorkspacePreference(workspacePreferencePayload);
+    setUserPreference(userPreferencePayload);
   }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -126,8 +153,10 @@ export function AlertHub() {
         description: form.description.trim(),
         eventType: form.eventType,
         workflowKind: form.eventType === "ticker_entered_top_n" ? "screen" : form.workflowKind,
+        channel: form.channel,
         strategyTemplateId: form.strategyTemplateId ? Number(form.strategyTemplateId) : null,
-        destinationEmail: form.destinationEmail.trim(),
+        destinationEmail: form.channel === "email" ? form.destinationEmail.trim() : "",
+        destinationWebhookUrl: form.channel === "email" ? "" : form.destinationWebhookUrl.trim(),
         ticker: form.ticker.trim(),
         topNThreshold: form.topNThreshold ? Number(form.topNThreshold) : null,
         isEnabled: form.isEnabled,
@@ -165,7 +194,13 @@ export function AlertHub() {
     if (nextName == null || nextName.trim() === "") {
       return;
     }
-    const nextEmail = window.prompt("Destination email", rule.destination_email) ?? rule.destination_email;
+    const nextChannel = normalizeAlertChannel(
+      window.prompt("Notification channel (email, slack_webhook, webhook)", rule.channel) ?? rule.channel,
+      rule.channel,
+    );
+    const nextDestination = nextChannel === "email"
+      ? window.prompt("Destination email", rule.destination_email) ?? rule.destination_email
+      : window.prompt("Destination webhook URL", rule.destination_webhook_url ?? "") ?? rule.destination_webhook_url ?? "";
     const nextTicker = rule.event_type === "ticker_entered_top_n"
       ? window.prompt("Ticker", rule.ticker ?? "") ?? rule.ticker ?? ""
       : rule.ticker ?? "";
@@ -177,7 +212,9 @@ export function AlertHub() {
     try {
       await updateAlertRule(rule.id, {
         name: nextName.trim(),
-        destinationEmail: nextEmail.trim(),
+        channel: nextChannel,
+        destinationEmail: nextChannel === "email" ? nextDestination.trim() : "",
+        destinationWebhookUrl: nextChannel === "email" ? "" : nextDestination.trim(),
         ticker: nextTicker.trim(),
         topNThreshold: nextThreshold ? Number(nextThreshold) : null,
       });
@@ -186,6 +223,59 @@ export function AlertHub() {
       setError(formatApiError(updateError, "Unable to update this alert."));
     } finally {
       setActiveRuleId(null);
+    }
+  }
+
+  async function handleSaveWorkspacePreference(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (user == null || workspacePreference == null) {
+      return;
+    }
+    setPreferenceAction("workspace");
+    setError(null);
+    try {
+      const updated = await updateWorkspaceNotificationPreference({
+        workspaceId: user.active_workspace?.id,
+        defaultEmail: workspacePreference.default_email,
+        emailEnabled: workspacePreference.email_enabled,
+        slackEnabled: workspacePreference.slack_enabled,
+        webhookEnabled: workspacePreference.webhook_enabled,
+        slackWebhookUrl: workspacePreference.slack_webhook_url ?? "",
+        genericWebhookUrl: workspacePreference.generic_webhook_url ?? "",
+        digestEnabled: workspacePreference.digest_enabled,
+        digestHourUtc: workspacePreference.digest_hour_utc,
+        notifyOnRunSuccess: workspacePreference.notify_on_run_success,
+        notifyOnRunFailure: workspacePreference.notify_on_run_failure,
+      });
+      setWorkspacePreference(updated);
+    } catch (saveError) {
+      setError(formatApiError(saveError, "Unable to update workspace notification preferences."));
+    } finally {
+      setPreferenceAction(null);
+    }
+  }
+
+  async function handleSaveUserPreference(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (user == null || userPreference == null) {
+      return;
+    }
+    setPreferenceAction("user");
+    setError(null);
+    try {
+      const updated = await updateUserNotificationPreference({
+        workspaceId: user.active_workspace?.id,
+        deliveryEmail: userPreference.delivery_email,
+        emailEnabled: userPreference.email_enabled,
+        slackEnabled: userPreference.slack_enabled,
+        webhookEnabled: userPreference.webhook_enabled,
+        digestEnabled: userPreference.digest_enabled,
+      });
+      setUserPreference(updated);
+    } catch (saveError) {
+      setError(formatApiError(saveError, "Unable to update your notification preferences."));
+    } finally {
+      setPreferenceAction(null);
     }
   }
 
@@ -236,8 +326,8 @@ export function AlertHub() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M8 Notifications</p>
-            <h1 style={titleStyle}>Alert rules and recent delivery events</h1>
+            <p style={eyebrowStyle}>Notifications</p>
+            <h1 style={titleStyle}>Alert routing, digests, and delivery history</h1>
           </div>
           <div style={actionRowStyle}>
             <Link href="/app" style={ghostLinkStyle}>
@@ -253,9 +343,9 @@ export function AlertHub() {
         </div>
 
         <p style={bodyStyle}>
-          Configure first-party email alerts for run failures, workflow completion, or a specific
-          ticker entering the top N ranked names. Recent notification deliveries stay visible here
-          even if the email backend is local-console in development.
+          Route alerts by email, Slack webhook, or generic webhook. Workspace-level settings define
+          default destinations and digests, while each user can opt into the channels they actually
+          monitor.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -318,6 +408,19 @@ export function AlertHub() {
             </label>
 
             <label style={fieldStyle}>
+              <span style={labelStyle}>Notification channel</span>
+              <select
+                value={form.channel}
+                onChange={(event) => setForm((current) => ({ ...current, channel: event.target.value as AlertRule["channel"] }))}
+                style={inputStyle}
+              >
+                <option value="email">Email</option>
+                <option value="slack_webhook">Slack webhook</option>
+                <option value="webhook">Generic webhook</option>
+              </select>
+            </label>
+
+            <label style={fieldStyle}>
               <span style={labelStyle}>Template scope</span>
               <select
                 value={form.strategyTemplateId}
@@ -343,15 +446,27 @@ export function AlertHub() {
               />
             </label>
 
-            <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-              <span style={labelStyle}>Destination email</span>
-              <input
-                value={form.destinationEmail}
-                onChange={(event) => setForm((current) => ({ ...current, destinationEmail: event.target.value }))}
-                style={inputStyle}
-                placeholder={user.email || "falls back to the account email"}
-              />
-            </label>
+            {form.channel === "email" ? (
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={labelStyle}>Destination email</span>
+                <input
+                  value={form.destinationEmail}
+                  onChange={(event) => setForm((current) => ({ ...current, destinationEmail: event.target.value }))}
+                  style={inputStyle}
+                  placeholder={user.email || "falls back to the account email"}
+                />
+              </label>
+            ) : (
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={labelStyle}>{form.channel === "slack_webhook" ? "Slack webhook URL" : "Generic webhook URL"}</span>
+                <input
+                  value={form.destinationWebhookUrl}
+                  onChange={(event) => setForm((current) => ({ ...current, destinationWebhookUrl: event.target.value }))}
+                  style={inputStyle}
+                  placeholder="https://hooks.example.test/..."
+                />
+              </label>
+            )}
 
             {form.eventType === "ticker_entered_top_n" ? (
               <>
@@ -393,12 +508,241 @@ export function AlertHub() {
               <button type="submit" style={buttonStyle} disabled={isSubmitting}>
                 {isSubmitting ? "Creating..." : "Create alert"}
               </button>
-              <span style={noteStyle}>Top-N alerts only evaluate successful screen runs.</span>
+              <span style={noteStyle}>Top-N alerts only evaluate successful screen runs, and digests run once per day at the configured UTC hour.</span>
             </div>
           </form>
         </section>
 
         <div style={layoutStyle}>
+          <section style={sectionCardStyle}>
+            <div style={cardHeaderStyle}>
+              <div>
+                <p style={sectionLabelStyle}>Notification preferences</p>
+                <h2 style={cardTitleStyle}>Workspace defaults and personal opt-in</h2>
+              </div>
+              <span style={pillStyle}>{workspacePreference?.digest_enabled ? "Digest enabled" : "Digest paused"}</span>
+            </div>
+
+            <div style={preferenceGridStyle}>
+              <form style={listStyle} onSubmit={handleSaveWorkspacePreference}>
+                <div>
+                  <p style={sectionLabelStyle}>Workspace defaults</p>
+                  <p style={noteStyle}>
+                    These settings define shared fallbacks for Slack, generic webhooks, and the
+                    daily digest.
+                  </p>
+                </div>
+
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Default email</span>
+                  <input
+                    value={workspacePreference?.default_email ?? ""}
+                    onChange={(event) =>
+                      setWorkspacePreference((current) => (current ? { ...current, default_email: event.target.value } : current))
+                    }
+                    style={inputStyle}
+                    placeholder={user.email || "ops@example.com"}
+                  />
+                </label>
+
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Slack webhook URL</span>
+                  <input
+                    value={workspacePreference?.slack_webhook_url ?? ""}
+                    onChange={(event) =>
+                      setWorkspacePreference((current) => (current ? { ...current, slack_webhook_url: event.target.value } : current))
+                    }
+                    style={inputStyle}
+                    placeholder="https://hooks.slack.com/services/..."
+                  />
+                </label>
+
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Generic webhook URL</span>
+                  <input
+                    value={workspacePreference?.generic_webhook_url ?? ""}
+                    onChange={(event) =>
+                      setWorkspacePreference((current) => (current ? { ...current, generic_webhook_url: event.target.value } : current))
+                    }
+                    style={inputStyle}
+                    placeholder="https://hooks.example.test/..."
+                  />
+                </label>
+
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Digest hour (UTC)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={23}
+                    value={workspacePreference?.digest_hour_utc ?? 9}
+                    onChange={(event) =>
+                      setWorkspacePreference((current) =>
+                        current ? { ...current, digest_hour_utc: Number(event.target.value) } : current,
+                      )
+                    }
+                    style={inputStyle}
+                  />
+                </label>
+
+                <div style={checkboxGridStyle}>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={workspacePreference?.email_enabled ?? true}
+                      onChange={(event) =>
+                        setWorkspacePreference((current) =>
+                          current ? { ...current, email_enabled: event.target.checked } : current,
+                        )
+                      }
+                    />
+                    <span>Email enabled</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={workspacePreference?.slack_enabled ?? true}
+                      onChange={(event) =>
+                        setWorkspacePreference((current) =>
+                          current ? { ...current, slack_enabled: event.target.checked } : current,
+                        )
+                      }
+                    />
+                    <span>Slack enabled</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={workspacePreference?.webhook_enabled ?? true}
+                      onChange={(event) =>
+                        setWorkspacePreference((current) =>
+                          current ? { ...current, webhook_enabled: event.target.checked } : current,
+                        )
+                      }
+                    />
+                    <span>Webhook enabled</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={workspacePreference?.digest_enabled ?? false}
+                      onChange={(event) =>
+                        setWorkspacePreference((current) =>
+                          current ? { ...current, digest_enabled: event.target.checked } : current,
+                        )
+                      }
+                    />
+                    <span>Daily digest enabled</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={workspacePreference?.notify_on_run_success ?? true}
+                      onChange={(event) =>
+                        setWorkspacePreference((current) =>
+                          current ? { ...current, notify_on_run_success: event.target.checked } : current,
+                        )
+                      }
+                    />
+                    <span>Notify on run success</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={workspacePreference?.notify_on_run_failure ?? true}
+                      onChange={(event) =>
+                        setWorkspacePreference((current) =>
+                          current ? { ...current, notify_on_run_failure: event.target.checked } : current,
+                        )
+                      }
+                    />
+                    <span>Notify on run failure</span>
+                  </label>
+                </div>
+
+                <div style={actionRowStyle}>
+                  <button type="submit" style={buttonStyle} disabled={preferenceAction === "workspace" || workspacePreference == null}>
+                    {preferenceAction === "workspace" ? "Saving..." : "Save workspace defaults"}
+                  </button>
+                  <span style={noteStyle}>
+                    Last digest: {workspacePreference?.last_digest_sent_at ? new Date(workspacePreference.last_digest_sent_at).toLocaleString() : "never"}
+                  </span>
+                </div>
+              </form>
+
+              <form style={listStyle} onSubmit={handleSaveUserPreference}>
+                <div>
+                  <p style={sectionLabelStyle}>My preferences</p>
+                  <p style={noteStyle}>
+                    Personal preferences are opt-in switches. Slack and webhooks use the shared
+                    workspace destinations unless a specific alert overrides them.
+                  </p>
+                </div>
+
+                <label style={fieldStyle}>
+                  <span style={labelStyle}>Delivery email</span>
+                  <input
+                    value={userPreference?.delivery_email ?? ""}
+                    onChange={(event) =>
+                      setUserPreference((current) => (current ? { ...current, delivery_email: event.target.value } : current))
+                    }
+                    style={inputStyle}
+                    placeholder={user.email || "me@example.com"}
+                  />
+                </label>
+
+                <div style={checkboxGridStyle}>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={userPreference?.email_enabled ?? true}
+                      onChange={(event) =>
+                        setUserPreference((current) => (current ? { ...current, email_enabled: event.target.checked } : current))
+                      }
+                    />
+                    <span>Email alerts</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={userPreference?.slack_enabled ?? true}
+                      onChange={(event) =>
+                        setUserPreference((current) => (current ? { ...current, slack_enabled: event.target.checked } : current))
+                      }
+                    />
+                    <span>Slack alerts</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={userPreference?.webhook_enabled ?? true}
+                      onChange={(event) =>
+                        setUserPreference((current) => (current ? { ...current, webhook_enabled: event.target.checked } : current))
+                      }
+                    />
+                    <span>Webhook alerts</span>
+                  </label>
+                  <label style={toggleStyle}>
+                    <input
+                      type="checkbox"
+                      checked={userPreference?.digest_enabled ?? false}
+                      onChange={(event) =>
+                        setUserPreference((current) => (current ? { ...current, digest_enabled: event.target.checked } : current))
+                      }
+                    />
+                    <span>Receive digest email</span>
+                  </label>
+                </div>
+
+                <div style={actionRowStyle}>
+                  <button type="submit" style={buttonStyle} disabled={preferenceAction === "user" || userPreference == null}>
+                    {preferenceAction === "user" ? "Saving..." : "Save my preferences"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+
           <section style={sectionCardStyle}>
             <div style={cardHeaderStyle}>
               <div>
@@ -418,7 +762,7 @@ export function AlertHub() {
                         <p style={sectionLabelStyle}>{rule.event_type.replaceAll("_", " ")}</p>
                         <h3 style={cardTitleStyle}>{rule.name}</h3>
                         <p style={metaStyle}>
-                          {rule.workflow_kind || "any workflow"} - {rule.destination_email || user.email || "fallback account email"}
+                          {rule.workflow_kind || "any workflow"} - {formatRuleDestination(rule, user)}
                         </p>
                       </div>
                       <span style={stateBadgeStyle(rule.is_enabled ? "enabled" : "paused")}>
@@ -426,6 +770,7 @@ export function AlertHub() {
                       </span>
                     </div>
                     <p style={bodyStyle}>{rule.description || "No description provided."}</p>
+                    <p style={metaStyle}>Channel: {rule.channel.replaceAll("_", " ")}</p>
                     {rule.ticker ? (
                       <p style={metaStyle}>
                         Target: {rule.ticker} in top {rule.top_n_threshold}
@@ -489,12 +834,13 @@ export function AlertHub() {
                         <p style={sectionLabelStyle}>{notification.event_type.replaceAll("_", " ")}</p>
                         <h3 style={cardTitleStyle}>{notification.subject}</h3>
                         <p style={metaStyle}>
-                          {notification.recipient_email ?? "no recipient"} - {notification.created_at}
+                          {formatNotificationRecipient(notification)} - {new Date(notification.created_at).toLocaleString()}
                         </p>
                       </div>
                       <span style={stateBadgeStyle(notification.status)}>{notification.status}</span>
                     </div>
                     <p style={bodyStyle}>{notification.body}</p>
+                    <p style={metaStyle}>Channel: {notification.channel.replaceAll("_", " ")}</p>
                     {notification.delivery_error ? <p style={errorStyle}>{notification.delivery_error}</p> : null}
                     <div style={actionRowStyle}>
                       {notification.screen_run_id ? (
@@ -524,6 +870,28 @@ function formatApiError(error: unknown, fallback: string): string {
     return error.errors.length > 0 ? `${error.message} ${error.errors.join(" ")}` : error.message;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function normalizeAlertChannel(rawValue: string, fallback: AlertRule["channel"]): AlertRule["channel"] {
+  const normalized = rawValue.trim().toLowerCase();
+  if (normalized === "email" || normalized === "slack_webhook" || normalized === "webhook") {
+    return normalized;
+  }
+  return fallback;
+}
+
+function formatRuleDestination(rule: AlertRule, user: CurrentUser): string {
+  if (rule.channel === "email") {
+    return rule.destination_email || user.email || "fallback account email";
+  }
+  return rule.destination_webhook_url || "workspace default destination";
+}
+
+function formatNotificationRecipient(notification: NotificationEvent): string {
+  if (notification.channel === "email" || notification.channel === "digest") {
+    return notification.recipient_email ?? "no recipient";
+  }
+  return notification.recipient_webhook_url ?? "no destination";
 }
 
 const pageStyle: CSSProperties = {
@@ -630,6 +998,13 @@ const formGridStyle: CSSProperties = {
   marginTop: "1.25rem",
 };
 
+const preferenceGridStyle: CSSProperties = {
+  display: "grid",
+  gap: "1.25rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  marginTop: "1.25rem",
+};
+
 const fieldStyle: CSSProperties = {
   display: "grid",
   gap: "0.45rem",
@@ -653,6 +1028,12 @@ const toggleStyle: CSSProperties = {
   gap: "0.5rem",
   alignItems: "center",
   color: "#35506b",
+};
+
+const checkboxGridStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.75rem",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
 };
 
 const buttonStyle: CSSProperties = {

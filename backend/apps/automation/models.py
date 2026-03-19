@@ -4,12 +4,18 @@ from django.conf import settings
 from django.db import models
 from django_celery_beat.models import PeriodicTask
 
+from apps.collaboration.models import ReviewStatus
 from apps.jobs.models import JobRun
 from apps.strategy_templates.models import StrategyTemplate
 from apps.workspaces.models import Workspace
 
 
 class RunSchedule(models.Model):
+    class NotificationChannel(models.TextChoices):
+        EMAIL = "email", "Email"
+        SLACK_WEBHOOK = "slack_webhook", "Slack webhook"
+        WEBHOOK = "webhook", "Generic webhook"
+
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="run_schedules")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -28,9 +34,21 @@ class RunSchedule(models.Model):
     cron_day_of_month = models.CharField(max_length=64, default="*")
     cron_month_of_year = models.CharField(max_length=64, default="*")
     is_enabled = models.BooleanField(default=True)
+    notify_channel = models.CharField(max_length=32, choices=NotificationChannel.choices, default=NotificationChannel.EMAIL)
     notify_email = models.EmailField(blank=True)
+    notify_webhook_url = models.URLField(blank=True)
     notify_on_success = models.BooleanField(default=True)
     notify_on_failure = models.BooleanField(default=True)
+    review_status = models.CharField(max_length=32, choices=ReviewStatus.choices, default=ReviewStatus.DRAFT)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_run_schedules",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.TextField(blank=True)
     periodic_task = models.OneToOneField(
         PeriodicTask,
         on_delete=models.SET_NULL,
@@ -52,6 +70,7 @@ class RunSchedule(models.Model):
         indexes = [
             models.Index(fields=["workspace", "is_enabled", "updated_at"]),
             models.Index(fields=["workspace", "strategy_template", "updated_at"]),
+            models.Index(fields=["workspace", "review_status", "updated_at"]),
         ]
 
     def __str__(self) -> str:
@@ -72,6 +91,8 @@ class AlertRule(models.Model):
 
     class Channel(models.TextChoices):
         EMAIL = "email", "Email"
+        SLACK_WEBHOOK = "slack_webhook", "Slack webhook"
+        WEBHOOK = "webhook", "Generic webhook"
 
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="alert_rules")
     created_by = models.ForeignKey(
@@ -94,6 +115,7 @@ class AlertRule(models.Model):
     workflow_kind = models.CharField(max_length=32, choices=WorkflowKind.choices, blank=True, default="")
     channel = models.CharField(max_length=32, choices=Channel.choices, default=Channel.EMAIL)
     destination_email = models.EmailField(blank=True)
+    destination_webhook_url = models.URLField(blank=True)
     ticker = models.CharField(max_length=32, blank=True)
     top_n_threshold = models.PositiveIntegerField(null=True, blank=True)
     is_enabled = models.BooleanField(default=True)
@@ -121,6 +143,9 @@ class NotificationEvent(models.Model):
 
     class Channel(models.TextChoices):
         EMAIL = "email", "Email"
+        SLACK_WEBHOOK = "slack_webhook", "Slack webhook"
+        WEBHOOK = "webhook", "Generic webhook"
+        DIGEST = "digest", "Digest"
 
     workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="notification_events")
     alert_rule = models.ForeignKey(
@@ -162,6 +187,7 @@ class NotificationEvent(models.Model):
     event_type = models.CharField(max_length=64)
     status = models.CharField(max_length=32, choices=Status.choices, default=Status.PENDING)
     recipient_email = models.EmailField(blank=True)
+    recipient_webhook_url = models.URLField(blank=True)
     subject = models.CharField(max_length=255)
     body = models.TextField()
     delivery_error = models.TextField(blank=True)
@@ -179,3 +205,51 @@ class NotificationEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.event_type}:{self.pk}"
+
+
+class WorkspaceNotificationPreference(models.Model):
+    workspace = models.OneToOneField(Workspace, on_delete=models.CASCADE, related_name="notification_preferences")
+    default_email = models.EmailField(blank=True)
+    email_enabled = models.BooleanField(default=True)
+    slack_enabled = models.BooleanField(default=True)
+    webhook_enabled = models.BooleanField(default=True)
+    slack_webhook_url = models.URLField(blank=True)
+    generic_webhook_url = models.URLField(blank=True)
+    digest_enabled = models.BooleanField(default=False)
+    digest_hour_utc = models.PositiveSmallIntegerField(default=9)
+    notify_on_run_success = models.BooleanField(default=True)
+    notify_on_run_failure = models.BooleanField(default=True)
+    last_digest_sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["workspace_id"]
+
+    def __str__(self) -> str:
+        return f"workspace-notifications:{self.workspace_id}"
+
+
+class UserNotificationPreference(models.Model):
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="user_notification_preferences")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notification_preferences",
+    )
+    delivery_email = models.EmailField(blank=True)
+    email_enabled = models.BooleanField(default=True)
+    slack_enabled = models.BooleanField(default=True)
+    webhook_enabled = models.BooleanField(default=True)
+    digest_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["workspace_id", "user_id"]
+        constraints = [
+            models.UniqueConstraint(fields=["workspace", "user"], name="uniq_user_notification_preference_workspace_user"),
+        ]
+
+    def __str__(self) -> str:
+        return f"user-notifications:{self.workspace_id}:{self.user_id}"

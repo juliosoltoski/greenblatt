@@ -30,9 +30,13 @@ type ScheduleFormState = {
   cronDayOfWeek: string;
   cronDayOfMonth: string;
   cronMonthOfYear: string;
+  notifyChannel: RunSchedule["notify_channel"];
   notifyEmail: string;
+  notifyWebhookUrl: string;
   notifyOnSuccess: boolean;
   notifyOnFailure: boolean;
+  reviewStatus: RunSchedule["review_status"];
+  reviewNotes: string;
   isEnabled: boolean;
 };
 
@@ -46,9 +50,13 @@ const initialFormState: ScheduleFormState = {
   cronDayOfWeek: "1-5",
   cronDayOfMonth: "*",
   cronMonthOfYear: "*",
+  notifyChannel: "email",
   notifyEmail: "",
+  notifyWebhookUrl: "",
   notifyOnSuccess: true,
   notifyOnFailure: true,
+  reviewStatus: "draft",
+  reviewNotes: "",
   isEnabled: true,
 };
 
@@ -136,9 +144,13 @@ export function ScheduleHub() {
         cronDayOfWeek: form.cronDayOfWeek.trim(),
         cronDayOfMonth: form.cronDayOfMonth.trim(),
         cronMonthOfYear: form.cronMonthOfYear.trim(),
+        notifyChannel: form.notifyChannel,
         notifyEmail: form.notifyEmail.trim(),
+        notifyWebhookUrl: form.notifyWebhookUrl.trim(),
         notifyOnSuccess: form.notifyOnSuccess,
         notifyOnFailure: form.notifyOnFailure,
+        reviewStatus: form.reviewStatus,
+        reviewNotes: form.reviewNotes.trim(),
         isEnabled: form.isEnabled,
       });
       setForm({
@@ -180,7 +192,10 @@ export function ScheduleHub() {
     const nextHour = window.prompt("cron_hour", schedule.cron_hour) ?? schedule.cron_hour;
     const nextMinute = window.prompt("cron_minute", schedule.cron_minute) ?? schedule.cron_minute;
     const nextDayOfWeek = window.prompt("cron_day_of_week", schedule.cron_day_of_week) ?? schedule.cron_day_of_week;
+    const nextChannel = window.prompt("Notification channel", schedule.notify_channel) ?? schedule.notify_channel;
     const nextEmail = window.prompt("Notification email", schedule.notify_email) ?? schedule.notify_email;
+    const nextWebhook = window.prompt("Notification webhook URL", schedule.notify_webhook_url ?? "") ?? schedule.notify_webhook_url ?? "";
+    const nextReviewStatus = window.prompt("Review status", schedule.review_status) ?? schedule.review_status;
     setActiveScheduleId(schedule.id);
     setError(null);
     try {
@@ -189,7 +204,10 @@ export function ScheduleHub() {
         cronHour: nextHour.trim(),
         cronMinute: nextMinute.trim(),
         cronDayOfWeek: nextDayOfWeek.trim(),
+        notifyChannel: nextChannel as RunSchedule["notify_channel"],
         notifyEmail: nextEmail.trim(),
+        notifyWebhookUrl: nextWebhook.trim(),
+        reviewStatus: nextReviewStatus as RunSchedule["review_status"],
       });
       await refresh(user);
     } catch (updateError) {
@@ -392,12 +410,58 @@ export function ScheduleHub() {
             </label>
 
             <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-              <span style={labelStyle}>Notification email</span>
-              <input
-                value={form.notifyEmail}
-                onChange={(event) => setForm((current) => ({ ...current, notifyEmail: event.target.value }))}
+              <span style={labelStyle}>Notification channel</span>
+              <select
+                value={form.notifyChannel}
+                onChange={(event) => setForm((current) => ({ ...current, notifyChannel: event.target.value as RunSchedule["notify_channel"] }))}
                 style={inputStyle}
-                placeholder={user.email || "falls back to the account email"}
+              >
+                <option value="email">Email</option>
+                <option value="slack_webhook">Slack webhook</option>
+                <option value="webhook">Generic webhook</option>
+              </select>
+            </label>
+
+            <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+              <span style={labelStyle}>{form.notifyChannel === "email" ? "Notification email" : "Notification webhook URL"}</span>
+              {form.notifyChannel === "email" ? (
+                <input
+                  value={form.notifyEmail}
+                  onChange={(event) => setForm((current) => ({ ...current, notifyEmail: event.target.value }))}
+                  style={inputStyle}
+                  placeholder={user.email || "falls back to the account email"}
+                />
+              ) : (
+                <input
+                  value={form.notifyWebhookUrl}
+                  onChange={(event) => setForm((current) => ({ ...current, notifyWebhookUrl: event.target.value }))}
+                  style={inputStyle}
+                  placeholder="https://hooks.example.test/..."
+                />
+              )}
+            </label>
+
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Review status</span>
+              <select
+                value={form.reviewStatus}
+                onChange={(event) => setForm((current) => ({ ...current, reviewStatus: event.target.value as RunSchedule["review_status"] }))}
+                style={inputStyle}
+              >
+                <option value="draft">Draft</option>
+                <option value="in_review">In review</option>
+                <option value="approved">Approved</option>
+                <option value="changes_requested">Changes requested</option>
+              </select>
+            </label>
+
+            <label style={fieldStyle}>
+              <span style={labelStyle}>Review notes</span>
+              <input
+                value={form.reviewNotes}
+                onChange={(event) => setForm((current) => ({ ...current, reviewNotes: event.target.value }))}
+                style={inputStyle}
+                placeholder="Optional approval notes"
               />
             </label>
 
@@ -460,9 +524,12 @@ export function ScheduleHub() {
                         Template: {schedule.strategy_template.name} - TZ {schedule.timezone}
                       </p>
                     </div>
-                    <span style={stateBadgeStyle(schedule.is_enabled ? "enabled" : "paused")}>
-                      {schedule.is_enabled ? "enabled" : "paused"}
-                    </span>
+                    <div style={{ display: "grid", gap: "0.45rem", justifyItems: "end" }}>
+                      <span style={stateBadgeStyle(schedule.is_enabled ? "enabled" : "paused")}>
+                        {schedule.is_enabled ? "enabled" : "paused"}
+                      </span>
+                      <span style={pillStyle}>{schedule.review_status.replaceAll("_", " ")}</span>
+                    </div>
                   </div>
 
                   <p style={bodyStyle}>{schedule.description || "No description provided."}</p>
@@ -477,7 +544,9 @@ export function ScheduleHub() {
                     <div style={statCardStyle}>
                       <strong>Notifications</strong>
                       <div style={metaStyle}>
-                        {schedule.notify_email || user.email || "fallback account email"}
+                        {schedule.notify_channel === "email"
+                          ? schedule.notify_email || user.email || "fallback account email"
+                          : schedule.notify_webhook_url || "workspace defaults"}
                       </div>
                     </div>
                     <div style={statCardStyle}>

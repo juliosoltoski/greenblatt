@@ -41,5 +41,9 @@ class LaunchRateThrottle(InstrumentedThrottleMixin, ScopedRateThrottle):
     scope = "launch"
 
 
+class MutationRateThrottle(InstrumentedThrottleMixin, ScopedRateThrottle):
+    scope = "mutation"
+
+
 class ExportRateThrottle(InstrumentedThrottleMixin, ScopedRateThrottle):
     scope = "export"

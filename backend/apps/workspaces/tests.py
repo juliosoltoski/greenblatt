@@ -53,3 +53,38 @@ class WorkspaceApiTests(TestCase):
         payload = response.json()
         self.assertEqual(len(payload["results"]), 1)
         self.assertEqual(payload["results"][0]["role"], WorkspaceMembership.Role.OWNER)
+
+    def test_owner_can_patch_workspace_settings(self) -> None:
+        user = User.objects.create_user(username="owner", password="secret-pass-123")
+        self.client.force_login(user)
+        workspace = user.workspace_memberships.get().workspace
+
+        response = self.client.patch(
+            f"/api/v1/workspaces/{workspace.id}/",
+            data={"name": "Updated Workspace", "timezone": "Europe/Paris"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        workspace.refresh_from_db()
+        self.assertEqual(workspace.name, "Updated Workspace")
+        self.assertEqual(workspace.timezone, "Europe/Paris")
+
+    def test_viewer_cannot_patch_workspace_settings(self) -> None:
+        owner = User.objects.create_user(username="owner", password="secret-pass-123")
+        viewer = User.objects.create_user(username="viewer", password="secret-pass-123")
+        workspace = owner.workspace_memberships.get().workspace
+        WorkspaceMembership.objects.create(
+            workspace=workspace,
+            user=viewer,
+            role=WorkspaceMembership.Role.VIEWER,
+        )
+        self.client.force_login(viewer)
+
+        response = self.client.patch(
+            f"/api/v1/workspaces/{workspace.id}/",
+            data={"name": "Should fail"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)

@@ -31,6 +31,14 @@ class JobRun(models.Model):
     error_message = models.TextField(blank=True)
     retry_count = models.PositiveIntegerField(default=0)
     celery_task_id = models.CharField(max_length=255, blank=True, db_index=True)
+    cancel_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancel_requested_jobs",
+    )
+    cancel_requested_at = models.DateTimeField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -67,3 +75,33 @@ class JobRun(models.Model):
         if self.started_at is None or self.finished_at is None:
             return None
         return max(0.0, (self.finished_at - self.started_at).total_seconds())
+
+    @property
+    def cancellation_requested(self) -> bool:
+        return self.cancel_requested_at is not None and not self.is_terminal
+
+
+class JobEvent(models.Model):
+    class Level(models.TextChoices):
+        INFO = "info", "Info"
+        WARNING = "warning", "Warning"
+        ERROR = "error", "Error"
+
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name="job_events")
+    job = models.ForeignKey(JobRun, on_delete=models.CASCADE, related_name="events")
+    level = models.CharField(max_length=16, choices=Level.choices, default=Level.INFO)
+    event_type = models.CharField(max_length=64)
+    message = models.CharField(max_length=255)
+    progress_percent = models.PositiveSmallIntegerField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["workspace", "job", "created_at"]),
+            models.Index(fields=["job", "event_type", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.job_id}:{self.event_type}:{self.pk}"

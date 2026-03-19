@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.collaboration.models import ReviewStatus
 from apps.backtests.models import BacktestRun
 from apps.backtests.serializers import BacktestLaunchSerializer
 from apps.backtests.services import BacktestLaunchRequest, BacktestRunService
@@ -28,6 +29,8 @@ class StrategyTemplateDefinition:
     is_starred: bool = False
     tags: list[str] | None = None
     notes: str = ""
+    review_status: str = ReviewStatus.DRAFT
+    review_notes: str = ""
     source_screen_run: ScreenRun | None = None
     source_backtest_run: BacktestRun | None = None
 
@@ -148,6 +151,8 @@ class StrategyTemplateService:
             is_starred=definition.is_starred,
             tags=definition.tags or [],
             notes=definition.notes,
+            review_status=definition.review_status,
+            review_notes=definition.review_notes,
             source_screen_run=definition.source_screen_run,
             source_backtest_run=definition.source_backtest_run,
         )
@@ -163,6 +168,10 @@ class StrategyTemplateService:
         is_starred: bool | None = None,
         tags: list[str] | None = None,
         notes: str | None = None,
+        review_status: str | None = None,
+        reviewed_by=None,
+        reviewed_at=None,
+        review_notes: str | None = None,
     ) -> StrategyTemplate:
         if name is not None:
             template.name = name
@@ -178,6 +187,12 @@ class StrategyTemplateService:
             template.tags = tags
         if notes is not None:
             template.notes = notes.strip()
+        if review_status is not None:
+            template.review_status = review_status
+            template.reviewed_by = reviewed_by
+            template.reviewed_at = reviewed_at
+        if review_notes is not None:
+            template.review_notes = review_notes.strip()
         template.save()
         return template
 

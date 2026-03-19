@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.data_quality import build_screen_data_quality_payload
 from apps.core.providers import provider_config_from_request_payload
 from apps.jobs.errors import ProviderBuildError, wrap_provider_runtime_error
 from apps.jobs.models import JobRun
@@ -377,6 +378,13 @@ class ScreenRunService:
             "top_tickers": [row.get("ticker") for row in response.ranked_rows[:10]],
             "export_filename": export_filename,
             "provider": provider_info,
+            "data_quality": build_screen_data_quality_payload(
+                resolved_count=response.resolved_universe.resolved_count,
+                result_count=len(response.ranked_rows),
+                exclusion_count=len(response.excluded_rows),
+                top_n=screen_run.top_n,
+                fallback_used=bool(provider_info.get("fallback_used")),
+            ),
         }
 
 

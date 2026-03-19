@@ -62,13 +62,22 @@ Check:
 ## 7. Jobs, Schedules, And Alerts
 
 1. Open `http://localhost:8080/app/jobs` and run the smoke job.
-2. Confirm the job reaches a terminal state and status updates remain visible after refresh.
-3. Open `http://localhost:8080/app/schedules` and create a recurring schedule from a template.
-4. Use `Run now` to trigger it immediately.
-5. Open `http://localhost:8080/app/alerts`, create an alert rule, and launch a matching run.
-6. Confirm a notification event is recorded.
+2. Confirm timeline events stream in without a manual page refresh.
+3. Request cancellation for a running job, then launch another smoke job and confirm retry works after it finishes.
+4. Open `http://localhost:8080/app/schedules` and create a recurring schedule from a template.
+5. Set a review status on the schedule and use `Run now` to trigger it immediately.
+6. Open `http://localhost:8080/app/alerts`, set workspace and personal notification preferences, create an alert rule, and launch a matching run.
+7. Confirm a notification event is recorded with the expected channel and destination.
 
-## 8. Provider And Ops Checks
+## 8. Collaboration And Sharing
+
+1. Open `http://localhost:8080/app/collaboration`.
+2. Create a collection and confirm it appears in the activity feed.
+3. Open a template or run detail page and add a comment.
+4. Create a read-only share link and open the generated `/shared/<token>` URL in a separate browser session.
+5. Confirm the shared page is read-only and shows the expected resource payload.
+
+## 9. Provider And Ops Checks
 
 Provider diagnostics:
 
@@ -87,7 +96,7 @@ Metrics check:
 - `GET /metrics/`
 - if `METRICS_AUTH_TOKEN` is set, send either `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`
 
-## 9. Staging-Oriented Checks
+## 10. Staging-Oriented Checks
 
 Validate the rendered config before any staging push:
 
@@ -101,7 +110,7 @@ If a feature changes deploy, backup, or rollback behavior, also review:
 - [`infra/operations.md`](/home/jsoltoski/greenblatt/infra/operations.md)
 - [`infra/scripts/`](/home/jsoltoski/greenblatt/infra/scripts)
 
-## 10. After Verification
+## 11. After Verification
 
 - Update [release_notes.md](/home/jsoltoski/greenblatt/release_notes.md) with user-visible changes, migration notes, and smoke-test coverage.
 - Update [README.md](/home/jsoltoski/greenblatt/README.md) only if the user-facing setup or entry-point docs changed.

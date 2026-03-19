@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.data_quality import build_backtest_data_quality_payload
 from apps.core.providers import provider_config_from_request_payload
 from apps.backtests.models import (
     BacktestEquityPoint,
@@ -442,6 +443,15 @@ class BacktestRunService:
             "trade_summary": response.trade_summary_rows,
             "export_filename": export_filename,
             "provider": provider_info,
+            "data_quality": build_backtest_data_quality_payload(
+                start_date=backtest_run.start_date,
+                end_date=backtest_run.end_date,
+                equity_point_count=len(response.equity_curve_rows),
+                trade_count=len(response.trade_rows),
+                review_target_count=len(response.review_target_rows),
+                final_holding_count=len(response.final_holding_rows),
+                fallback_used=bool(provider_info.get("fallback_used")),
+            ),
         }
         return summary
 

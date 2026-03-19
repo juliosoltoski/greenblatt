@@ -1,14 +1,16 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent, type SVGProps } from "react";
+import { startTransition, useEffect, useEffectEvent, useState, type CSSProperties, type FormEvent, type SVGProps } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
   ApiError,
+  cancelJob,
   createStrategyTemplate,
   getBacktestRun,
   getCurrentUser,
+  listJobEvents,
   listBacktestEquityPoints,
   listBacktestFinalHoldings,
   listBacktestReviewTargets,
@@ -19,7 +21,11 @@ import {
   type BacktestReviewTarget,
   type BacktestRun,
   type BacktestTrade,
+  type JobEvent,
 } from "@/lib/api";
+import { JobTimeline } from "@/app/app/_components/JobTimeline";
+import { ResourceCollaborationPanel } from "@/app/app/_components/ResourceCollaborationPanel";
+import { useJobStream } from "@/lib/jobStream";
 import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
@@ -60,6 +66,7 @@ const DEFAULT_DETAIL_PREFERENCE: BacktestDetailPreference = {
 export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewProps) {
   const router = useRouter();
   const [backtestRun, setBacktestRun] = useState<BacktestRun | null>(null);
+  const [events, setEvents] = useState<JobEvent[]>([]);
   const [equityPoints, setEquityPoints] = useState<BacktestEquityPoint[]>([]);
   const [trades, setTrades] = useState<BacktestTrade[]>([]);
   const [tradeCount, setTradeCount] = useState(0);
@@ -87,6 +94,7 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [jobAction, setJobAction] = useState<"cancel" | null>(null);
 
   useEffect(() => {
     const preference = readViewPreference<BacktestDetailPreference>("backtest-run-detail", DEFAULT_DETAIL_PREFERENCE);
@@ -189,19 +197,28 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
     tradeSort,
   ]);
 
-  useEffect(() => {
-    if (backtestRun == null || backtestRun.job.is_terminal || state !== "ready") {
-      return undefined;
-    }
+  const handleStreamJob = useEffectEvent((job: BacktestRun["job"]) => {
+    setBacktestRun((current) => (current ? { ...current, job } : current));
+  });
 
-    const intervalId = window.setInterval(() => {
+  const handleStreamEvent = useEffectEvent((event: JobEvent) => {
+    setEvents((current) => {
+      if (current.some((item) => item.id === event.id)) {
+        return current;
+      }
+      return [...current, event].slice(-120);
+    });
+  });
+
+  useJobStream({
+    jobId: backtestRun?.job.id ?? null,
+    enabled: state === "ready" && backtestRun != null && !backtestRun.job.is_terminal,
+    onJob: handleStreamJob,
+    onEvent: handleStreamEvent,
+    onError: () => {
       void refreshDetail();
-    }, 2000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [backtestRun, state]);
+    },
+  });
 
   async function refreshDetail() {
     try {
@@ -232,6 +249,7 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
     setReviewTargetCount(payloads.reviewTargets.count);
     setFinalHoldings(payloads.finalHoldings.results);
     setFinalHoldingCount(payloads.finalHoldings.count);
+    setEvents(payloads.events.results);
     if (syncAnnotations) {
       setIsStarred(payloads.run.is_starred);
       setTagsText(payloads.run.tags.join(", "));
@@ -289,6 +307,23 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
     }
   }
 
+  async function handleCancelJob() {
+    if (backtestRun == null || backtestRun.job.is_terminal) {
+      return;
+    }
+    setJobAction("cancel");
+    setError(null);
+    try {
+      const updatedJob = await cancelJob(backtestRun.job.id);
+      setBacktestRun((current) => (current ? { ...current, job: updatedJob } : current));
+      await refreshDetail();
+    } catch (cancelError) {
+      setError(formatApiError(cancelError, "Unable to request cancellation for this backtest."));
+    } finally {
+      setJobAction(null);
+    }
+  }
+
   if (state === "loading") {
     return (
       <main style={pageStyle}>
@@ -320,6 +355,7 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
   const tradePageCount = Math.max(1, Math.ceil(tradeCount / tradePageSize));
   const reviewTargetPageCount = Math.max(1, Math.ceil(reviewTargetCount / reviewTargetPageSize));
   const chartData = buildChartSeries(equityPoints);
+  const dataQuality = extractDataQuality(backtestRun.summary);
 
   return (
     <main style={pageStyle}>
@@ -368,7 +404,20 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
             <span>{backtestRun.job.progress_percent}%</span>
             <span>{backtestRun.job.current_step || "Pending"}</span>
           </div>
+          <div style={actionRowStyle}>
+            {!backtestRun.job.is_terminal ? (
+              <button type="button" style={primaryLinkButtonStyle} onClick={() => void handleCancelJob()} disabled={jobAction === "cancel"}>
+                {jobAction === "cancel" ? "Requesting..." : "Request cancel"}
+              </button>
+            ) : null}
+            {backtestRun.job.cancellation_requested ? <span style={pillStyle}>Cancellation requested</span> : null}
+          </div>
         </div>
+
+        <section style={sectionCardStyle}>
+          <p style={sectionLabelStyle}>Job timeline</p>
+          <JobTimeline events={events} emptyMessage="Timeline events appear after the worker starts the run." />
+        </section>
 
         <div style={summaryGridStyle}>
           <SummaryCard label="Total return" value={formatPercent(backtestRun.summary.total_return)} detail={`${backtestRun.start_date} to ${backtestRun.end_date}`} />
@@ -383,6 +432,21 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
           <SummaryCard label="Export" value={backtestRun.export?.filename ?? "Pending"} detail={backtestRun.export ? "Artifact ready" : "Available when complete"} />
           <SummaryCard label="Research status" value={backtestRun.is_starred ? "Starred" : "Standard"} detail={backtestRun.tags.length > 0 ? backtestRun.tags.join(", ") : "No tags yet"} />
         </div>
+
+        {dataQuality.warningCount > 0 ? (
+          <section style={calloutStyle}>
+            <p style={sectionLabelStyle}>Data quality</p>
+            <h2 style={tableTitleStyle}>{dataQuality.warningCount} warning{dataQuality.warningCount === 1 ? "" : "s"}</h2>
+            <div style={stackStyle}>
+              {dataQuality.warnings.map((warning) => (
+                <div key={warning.code} style={warningRowStyle}>
+                  <strong>{warning.code.replaceAll("_", " ")}</strong>
+                  <span>{warning.message}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <div style={detailGridStyle}>
           <section style={sectionCardStyle}>
@@ -454,6 +518,11 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
           ) : (
             <div style={{ display: "grid", gap: "0.85rem" }}>
               <EquityCurveChart data={chartData} showBenchmark={showBenchmark} />
+              {chartData.sampledCount < chartData.sourceCount ? (
+                <p style={metaStyle}>
+                  Rendering {chartData.sampledCount.toLocaleString()} sampled points from {chartData.sourceCount.toLocaleString()} persisted equity points to keep the chart responsive.
+                </p>
+              ) : null}
               <div style={legendStyle}>
                 <span style={legendItemStyle}><span style={{ ...legendLineStyle, background: "#162132" }} />Strategy</span>
                 {chartData.hasBenchmark && showBenchmark ? (
@@ -640,6 +709,12 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
             emptyMessage={backtestRun.job.is_terminal ? "No final holdings were persisted." : "Final holdings will appear once the run finishes."}
           />
         </section>
+
+        <ResourceCollaborationPanel
+          workspaceId={backtestRun.workspace.id}
+          resourceKind="backtest_run"
+          resourceId={backtestRun.id}
+        />
       </section>
     </main>
   );
@@ -683,7 +758,8 @@ async function loadDetailPayloads(
       direction: options.holdingDirection,
     }),
   ]);
-  return { run, equity, trades, reviewTargets, finalHoldings };
+  const events = await listJobEvents(run.job.id, 120);
+  return { run, equity, trades, reviewTargets, finalHoldings, events };
 }
 
 function buildChartSeries(points: BacktestEquityPoint[]) {
@@ -691,7 +767,9 @@ function buildChartSeries(points: BacktestEquityPoint[]) {
     return null;
   }
 
-  const values = points.flatMap((point) => [point.equity, point.benchmark_equity].filter((value): value is number => value != null));
+  const sampledPoints = downsamplePoints(points, 180);
+  const renderPoints = sampledPoints.length === points.length ? points : sampledPoints;
+  const values = renderPoints.flatMap((point) => [point.equity, point.benchmark_equity].filter((value): value is number => value != null));
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
   const range = maxValue - minValue || 1;
@@ -700,13 +778,13 @@ function buildChartSeries(points: BacktestEquityPoint[]) {
   const padding = 24;
 
   const project = (value: number, index: number) => {
-    const x = padding + (index / Math.max(1, points.length - 1)) * (width - padding * 2);
+    const x = padding + (index / Math.max(1, renderPoints.length - 1)) * (width - padding * 2);
     const y = height - padding - ((value - minValue) / range) * (height - padding * 2);
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   };
 
-  const equityPath = points.map((point, index) => project(point.equity, index)).join(" ");
-  const benchmarkPoints = points
+  const equityPath = renderPoints.map((point, index) => project(point.equity, index)).join(" ");
+  const benchmarkPoints = renderPoints
     .map((point, index) => (point.benchmark_equity == null ? null : project(point.benchmark_equity, index)))
     .filter((value): value is string => value != null);
 
@@ -715,12 +793,28 @@ function buildChartSeries(points: BacktestEquityPoint[]) {
     height,
     minValue,
     maxValue,
-    firstDate: points[0]?.date ?? "",
-    lastDate: points[points.length - 1]?.date ?? "",
+    firstDate: renderPoints[0]?.date ?? "",
+    lastDate: renderPoints[renderPoints.length - 1]?.date ?? "",
     equityPath,
     benchmarkPath: benchmarkPoints.join(" "),
     hasBenchmark: benchmarkPoints.length > 1,
+    sampledCount: renderPoints.length,
+    sourceCount: points.length,
   };
+}
+
+function downsamplePoints(points: BacktestEquityPoint[], maxPoints: number): BacktestEquityPoint[] {
+  if (points.length <= maxPoints) {
+    return points;
+  }
+  const lastIndex = points.length - 1;
+  const step = lastIndex / Math.max(1, maxPoints - 1);
+  const sampled: BacktestEquityPoint[] = [];
+  for (let index = 0; index < maxPoints; index += 1) {
+    const pointIndex = index === maxPoints - 1 ? lastIndex : Math.round(index * step);
+    sampled.push(points[pointIndex]);
+  }
+  return sampled;
 }
 
 function EquityCurveChart({
@@ -851,6 +945,25 @@ function formatNumber(value: number): string {
   return value.toFixed(2);
 }
 
+function extractDataQuality(summary: Record<string, unknown>): {
+  warningCount: number;
+  warnings: Array<{ code: string; message: string }>;
+} {
+  const payload = typeof summary.data_quality === "object" && summary.data_quality != null ? summary.data_quality : null;
+  const warningCount =
+    payload != null && typeof (payload as { warning_count?: unknown }).warning_count === "number"
+      ? ((payload as { warning_count: number }).warning_count ?? 0)
+      : 0;
+  const warnings = Array.isArray((payload as { warnings?: unknown } | null)?.warnings)
+    ? ((payload as { warnings: Array<{ code?: string; message?: string }> }).warnings ?? [])
+        .map((warning) => ({
+          code: warning.code ?? "warning",
+          message: warning.message ?? "A data quality warning was recorded for this run.",
+        }))
+    : [];
+  return { warningCount, warnings };
+}
+
 function stateBadgeStyle(state: BacktestRun["job"]["state"]): CSSProperties {
   const palette = {
     queued: { background: "#dde6f0", color: "#162132" },
@@ -905,6 +1018,28 @@ const statusCardStyle: CSSProperties = {
   background: "#f8fbff",
   border: "1px solid rgba(73, 98, 128, 0.18)",
   marginTop: "1.5rem",
+};
+
+const calloutStyle: CSSProperties = {
+  padding: "1.25rem",
+  borderRadius: "22px",
+  background: "#fff7e8",
+  border: "1px solid rgba(201, 140, 0, 0.22)",
+  marginTop: "1.5rem",
+  display: "grid",
+  gap: "0.85rem",
+};
+
+const stackStyle: CSSProperties = {
+  display: "grid",
+  gap: "1rem",
+  alignContent: "start",
+};
+
+const warningRowStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.2rem",
+  color: "#6a4a00",
 };
 
 const statusHeaderStyle: CSSProperties = {
@@ -1264,5 +1399,13 @@ const starPillStyle: CSSProperties = {
   borderRadius: "999px",
   background: "#fff4cc",
   color: "#8b5c00",
+  fontSize: "0.82rem",
+};
+
+const pillStyle: CSSProperties = {
+  padding: "0.3rem 0.65rem",
+  borderRadius: "999px",
+  background: "#eef4fa",
+  color: "#35506b",
   fontSize: "0.82rem",
 };

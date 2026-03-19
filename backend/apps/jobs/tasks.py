@@ -10,11 +10,15 @@ from django.utils import timezone
 
 from apps.core.context import clear_observability_context, set_observability_context
 from apps.jobs.errors import provider_failure_metadata
-from apps.jobs.models import JobRun
+from apps.jobs.models import JobEvent, JobRun
 from apps.jobs.retries import RetryableJobError, error_code_for_exception, is_retryable_exception, merge_metadata, next_retry_delay_seconds
 
 
 logger = logging.getLogger(__name__)
+
+
+class JobCancelledError(RuntimeError):
+    pass
 
 
 class TrackedJobTask(Task):
@@ -31,6 +35,7 @@ class TrackedJobTask(Task):
         current_step: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> JobRun:
+        self.check_for_cancellation(job)
         if progress_percent is not None:
             job.progress_percent = max(0, min(100, int(progress_percent)))
         if current_step is not None:
@@ -38,6 +43,13 @@ class TrackedJobTask(Task):
         if metadata:
             job.metadata = merge_metadata(job.metadata, metadata)
         self._save_job(job, "progress_percent", "current_step", "metadata")
+        self._record_event(
+            job,
+            event_type="progress",
+            message=current_step or "Job progress updated.",
+            progress_percent=job.progress_percent,
+            metadata=metadata,
+        )
         return job
 
     @staticmethod
@@ -63,6 +75,7 @@ class TrackedJobTask(Task):
         job.error_message = ""
         job.finished_at = None
         self._save_job(job, "started_at", "celery_task_id", "state", "current_step", "error_code", "error_message", "finished_at")
+        self._record_event(job, event_type="running", message=self.initial_step, progress_percent=job.progress_percent)
 
     def _mark_retry(self, job: JobRun, exc: Exception, countdown: int) -> None:
         job.state = JobRun.State.QUEUED
@@ -82,6 +95,14 @@ class TrackedJobTask(Task):
             },
         )
         self._save_job(job, "state", "retry_count", "current_step", "error_code", "error_message", "finished_at", "metadata")
+        self._record_event(
+            job,
+            event_type="retry_scheduled",
+            level=JobEvent.Level.WARNING,
+            message=job.current_step,
+            progress_percent=job.progress_percent,
+            metadata={"error_code": job.error_code, "countdown_seconds": countdown},
+        )
 
     def _mark_failed(self, job: JobRun, exc: Exception) -> None:
         job.state = JobRun.State.FAILED
@@ -105,6 +126,23 @@ class TrackedJobTask(Task):
             metadata_updates,
         )
         self._save_job(job, "state", "error_code", "error_message", "finished_at", "metadata")
+        self._record_event(
+            job,
+            event_type="failed",
+            level=JobEvent.Level.ERROR,
+            message=job.error_message or "Job failed.",
+            progress_percent=job.progress_percent,
+            metadata=metadata_updates,
+        )
+        if provider_failure is not None:
+            self._record_event(
+                job,
+                event_type="provider_failure",
+                level=JobEvent.Level.ERROR,
+                message=f"Provider failure: {provider_failure.get('provider_name', 'unknown')}",
+                progress_percent=job.progress_percent,
+                metadata=provider_failure,
+            )
 
     def _mark_succeeded(self, job: JobRun, result: Any) -> None:
         job.state = JobRun.State.SUCCEEDED
@@ -124,6 +162,63 @@ class TrackedJobTask(Task):
             "finished_at",
             "metadata",
         )
+        self._record_event(
+            job,
+            event_type="succeeded",
+            message=self.completion_step,
+            progress_percent=job.progress_percent,
+            metadata={"result": result if isinstance(result, dict) else {"type": type(result).__name__}},
+        )
+
+    def _mark_cancelled(self, job: JobRun, exc: Exception | None = None) -> None:
+        job.state = JobRun.State.CANCELLED
+        job.current_step = "Cancelled"
+        job.error_code = "cancelled"
+        job.error_message = str(exc or "Job cancelled.")
+        job.finished_at = timezone.now()
+        job.metadata = merge_metadata(
+            job.metadata,
+            {
+                "last_error": {
+                    "code": job.error_code,
+                    "message": job.error_message,
+                    "retryable": False,
+                }
+            },
+        )
+        self._save_job(job, "state", "current_step", "error_code", "error_message", "finished_at", "metadata")
+        self._record_event(
+            job,
+            event_type="cancelled",
+            level=JobEvent.Level.WARNING,
+            message=job.error_message,
+            progress_percent=job.progress_percent,
+        )
+
+    def check_for_cancellation(self, job: JobRun) -> None:
+        job.refresh_from_db(fields=["state", "cancel_requested_at", "updated_at"])
+        if job.cancel_requested_at is not None and not job.is_terminal:
+            raise JobCancelledError("Job cancellation was requested.")
+
+    @staticmethod
+    def _record_event(
+        job: JobRun,
+        *,
+        event_type: str,
+        message: str,
+        level: str = JobEvent.Level.INFO,
+        progress_percent: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        JobEvent.objects.create(
+            workspace=job.workspace,
+            job=job,
+            level=level,
+            event_type=event_type,
+            message=message[:255],
+            progress_percent=progress_percent,
+            metadata=metadata or {},
+        )
 
     @staticmethod
     def _save_job(job: JobRun, *fields: str) -> None:
@@ -137,7 +232,11 @@ def _run_with_tracking(task: TrackedJobTask, job_run_id: int, work: Callable[[Jo
     task._mark_running(job)
 
     try:
+        task.check_for_cancellation(job)
         result = work(job)
+    except JobCancelledError as exc:
+        task._mark_cancelled(job, exc)
+        return {"message": "Job cancelled."}
     except Exception as exc:
         if is_retryable_exception(exc) and task.request.retries < task.max_retries:
             countdown = next_retry_delay_seconds(task.request.retries)
@@ -167,6 +266,7 @@ def _perform_smoke_job(
         raise RetryableJobError("Synthetic transient failure requested.", error_code="synthetic_retry")
 
     for index in range(step_count):
+        task.check_for_cancellation(job)
         if step_delay_ms > 0:
             time.sleep(step_delay_ms / 1000)
         percent_complete = int(((index + 1) / step_count) * 95)

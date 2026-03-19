@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.automation",
     "apps.backtests",
+    "apps.collaboration",
     "apps.core",
     "apps.jobs",
     "apps.screens",
@@ -145,6 +146,7 @@ REST_FRAMEWORK = {
         "anon": _env("DRF_THROTTLE_ANON", "120/min"),
         "login": _env("DRF_THROTTLE_LOGIN", "20/min"),
         "launch": _env("DRF_THROTTLE_LAUNCH", "60/hour"),
+        "mutation": _env("DRF_THROTTLE_MUTATION", "240/hour"),
         "export": _env("DRF_THROTTLE_EXPORT", "120/hour"),
     },
 }
@@ -163,8 +165,10 @@ CELERY_TASK_SOFT_TIME_LIMIT = int(_env("CELERY_TASK_SOFT_TIME_LIMIT", "1500") or
 CELERY_TASK_TIME_LIMIT = int(_env("CELERY_TASK_TIME_LIMIT", "1800") or "1800")
 CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_TASK_ROUTES = {
+    "automation.send_notification_digests": {"queue": "default"},
     "automation.run_scheduled_template": {"queue": "default"},
     "backtests.run_backtest_job": {"queue": "default"},
+    "core.run_provider_cache_warm_job": {"queue": "default"},
     "jobs.run_smoke_job": {"queue": "default"},
     "screens.run_screen_job": {"queue": "default"},
 }
@@ -199,6 +203,9 @@ MARKET_DATA_PROVIDER_FALLBACK = (_env("MARKET_DATA_PROVIDER_FALLBACK") or "").st
 ALPHA_VANTAGE_API_KEY = _env("ALPHA_VANTAGE_API_KEY")
 ALPHA_VANTAGE_BASE_URL = _env("ALPHA_VANTAGE_BASE_URL", "https://www.alphavantage.co/query") or "https://www.alphavantage.co/query"
 ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE = int(_env("ALPHA_VANTAGE_MAX_CALLS_PER_MINUTE", "5") or "5")
+SOCIAL_LOGIN_ENABLED = _env_bool("SOCIAL_LOGIN_ENABLED", False)
+BILLING_ENABLED = _env_bool("BILLING_ENABLED", False)
+SUPPORT_CONTACT_EMAIL = _env("SUPPORT_CONTACT_EMAIL", "support@example.test") or "support@example.test"
 
 EMAIL_BACKEND = _env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = _env("EMAIL_HOST", "localhost")

@@ -7,9 +7,11 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from django_celery_beat.models import PeriodicTask
 
 from apps.automation.models import AlertRule, NotificationEvent, RunSchedule
+from apps.collaboration.models import ReviewStatus
 from apps.backtests.models import BacktestRun
 from apps.jobs.models import JobRun
 from apps.screens.models import ScreenResultRow, ScreenRun
@@ -39,6 +41,16 @@ class FakeProvider(MarketDataProvider):
 
     def get_us_equity_candidates(self, *, limit: int = 3000):
         return [snapshot.ticker for snapshot in self.snapshots][:limit]
+
+
+class FakeWebhookResponse:
+    status = 200
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return None
 
 
 def make_snapshot(ticker: str, rank_seed: int, *, momentum_6m: float | None = None) -> SecuritySnapshot:
@@ -181,6 +193,52 @@ class AutomationApiTests(TestCase):
         self.assertEqual(notifications.status_code, 200)
         self.assertEqual(notifications.json()["count"], 0)
 
+    def test_notification_preference_endpoints_round_trip(self) -> None:
+        workspace_preference = self.client.get(f"/api/v1/automation/preferences/workspace/?workspace_id={self.workspace.id}")
+        self.assertEqual(workspace_preference.status_code, 200)
+        self.assertEqual(workspace_preference.json()["workspace"]["id"], self.workspace.id)
+
+        updated_workspace = self.client.patch(
+            "/api/v1/automation/preferences/workspace/",
+            data={
+                "workspace_id": self.workspace.id,
+                "default_email": "team@example.com",
+                "slack_webhook_url": "https://hooks.slack.test/services/demo",
+                "digest_enabled": True,
+                "digest_hour_utc": 7,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(updated_workspace.status_code, 200)
+        self.assertEqual(updated_workspace.json()["default_email"], "team@example.com")
+        self.assertTrue(updated_workspace.json()["digest_enabled"])
+
+        user_preference = self.client.get(f"/api/v1/automation/preferences/me/?workspace_id={self.workspace.id}")
+        self.assertEqual(user_preference.status_code, 200)
+        self.assertEqual(user_preference.json()["user_id"], self.user.id)
+
+        updated_user = self.client.patch(
+            "/api/v1/automation/preferences/me/",
+            data={
+                "workspace_id": self.workspace.id,
+                "delivery_email": "me@example.com",
+                "slack_enabled": True,
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(updated_user.status_code, 200)
+        self.assertEqual(updated_user.json()["delivery_email"], "me@example.com")
+        self.assertTrue(updated_user.json()["slack_enabled"])
+
+    def test_digest_periodic_task_is_synced(self) -> None:
+        from apps.automation.services import DIGEST_PERIODIC_TASK_NAME, NotificationService
+
+        task = NotificationService().sync_system_tasks()
+
+        self.assertEqual(task.name, DIGEST_PERIODIC_TASK_NAME)
+        self.assertEqual(task.task, "automation.send_notification_digests")
+        self.assertTrue(task.enabled)
+
     @patch("apps.screens.services.build_provider")
     def test_successful_screen_dispatch_sends_schedule_and_alert_notifications(self, provider_factory) -> None:
         provider_factory.return_value = FakeProvider(
@@ -280,6 +338,109 @@ class AutomationApiTests(TestCase):
         self.assertEqual(event.status, NotificationEvent.Status.SENT)
         self.assertEqual(event.recipient_email, "alerts@example.com")
         self.assertEqual(len(mail.outbox), 1)
+
+    @patch("apps.automation.services.urllib_request.urlopen", return_value=FakeWebhookResponse())
+    def test_run_failed_alert_can_send_webhook(self, urlopen_mock) -> None:
+        AlertRule.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            name="Webhook failure",
+            event_type=AlertRule.EventType.RUN_FAILED,
+            workflow_kind=AlertRule.WorkflowKind.BACKTEST,
+            channel=AlertRule.Channel.WEBHOOK,
+            destination_webhook_url="https://example.test/hooks/general",
+        )
+        job = JobRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="backtest_run",
+            state=JobRun.State.FAILED,
+            error_message="Synthetic failure",
+            metadata={"strategy_template_id": self.backtest_template.id},
+        )
+        backtest_run = BacktestRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            source_template=self.backtest_template,
+            universe=self.universe,
+            job=job,
+            start_date=date(2024, 1, 5),
+            end_date=date(2025, 2, 14),
+            portfolio_size=10,
+            benchmark="^GSPC",
+        )
+
+        from apps.automation.services import NotificationService
+
+        NotificationService().dispatch_for_backtest_run(backtest_run)
+
+        event = NotificationEvent.objects.get()
+        self.assertEqual(event.channel, NotificationEvent.Channel.WEBHOOK)
+        self.assertEqual(event.status, NotificationEvent.Status.SENT)
+        self.assertEqual(event.recipient_webhook_url, "https://example.test/hooks/general")
+        urlopen_mock.assert_called_once()
+
+    def test_workspace_digest_sends_summary_email(self) -> None:
+        from apps.automation.services import NotificationService
+
+        workspace_preference = NotificationService().workspace_preferences(self.workspace)
+        workspace_preference.digest_enabled = True
+        workspace_preference.default_email = "digest@example.com"
+        workspace_preference.digest_hour_utc = timezone.now().hour
+        workspace_preference.save(update_fields=["digest_enabled", "default_email", "digest_hour_utc", "updated_at"])
+
+        job = JobRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="screen_run",
+            state=JobRun.State.SUCCEEDED,
+            finished_at=timezone.now(),
+        )
+        ScreenRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            source_template=self.screen_template,
+            universe=self.universe,
+            job=job,
+            top_n=10,
+            momentum_mode="overlay",
+            result_count=4,
+        )
+
+        sent_count = NotificationService().dispatch_workspace_digest(self.workspace, now=timezone.now())
+
+        self.assertEqual(sent_count, 1)
+        digest = NotificationEvent.objects.get(channel=NotificationEvent.Channel.DIGEST)
+        self.assertEqual(digest.status, NotificationEvent.Status.SENT)
+        self.assertEqual(digest.recipient_email, "digest@example.com")
+        self.assertIn("Runs: 1 total", digest.body)
+        self.assertEqual(len(mail.outbox), 1)
+        workspace_preference.refresh_from_db()
+        self.assertIsNotNone(workspace_preference.last_digest_sent_at)
+
+        repeat_count = NotificationService().dispatch_workspace_digest(self.workspace, now=timezone.now())
+        self.assertEqual(repeat_count, 0)
+        self.assertEqual(NotificationEvent.objects.filter(channel=NotificationEvent.Channel.DIGEST).count(), 1)
+
+    def test_schedule_review_status_can_be_updated(self) -> None:
+        schedule = RunSchedule.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            strategy_template=self.screen_template,
+            name="Review me",
+            review_status=ReviewStatus.DRAFT,
+        )
+
+        response = self.client.patch(
+            f"/api/v1/automation/run-schedules/{schedule.id}/",
+            data={"review_status": ReviewStatus.APPROVED, "review_notes": "Ready for recurring use."},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["review_status"], ReviewStatus.APPROVED)
+        self.assertEqual(response.json()["reviewed_by_id"], self.user.id)
+        self.assertEqual(response.json()["review_notes"], "Ready for recurring use.")
 
     def test_viewer_cannot_manage_automation(self) -> None:
         owner = User.objects.create_user(username="owner", password="secret-pass-123")

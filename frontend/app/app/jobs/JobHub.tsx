@@ -1,10 +1,24 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { startTransition, useEffect, useEffectEvent, useState, type CSSProperties, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { ApiError, getCurrentUser, getJob, launchSmokeJob, listJobs, type CurrentUser, type JobRun } from "@/lib/api";
+import {
+  ApiError,
+  cancelJob,
+  getCurrentUser,
+  getJob,
+  launchSmokeJob,
+  listJobEvents,
+  listJobs,
+  retryJob,
+  type CurrentUser,
+  type JobEvent,
+  type JobRun,
+} from "@/lib/api";
+import { JobTimeline } from "@/app/app/_components/JobTimeline";
+import { useJobStream } from "@/lib/jobStream";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -14,12 +28,14 @@ export function JobHub() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [jobs, setJobs] = useState<JobRun[]>([]);
   const [selectedJob, setSelectedJob] = useState<JobRun | null>(null);
+  const [events, setEvents] = useState<JobEvent[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [stepCount, setStepCount] = useState(4);
   const [stepDelayMs, setStepDelayMs] = useState(750);
   const [failureMode, setFailureMode] = useState<"success" | "fail" | "retry_once">("success");
   const [isLaunching, setIsLaunching] = useState(false);
+  const [jobAction, setJobAction] = useState<"cancel" | "retry" | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -29,12 +45,14 @@ export function JobHub() {
         const currentUser = await getCurrentUser();
         const workspaceId = currentUser.active_workspace?.id;
         const jobPayload = await listJobs(workspaceId, 20);
+        const eventPayload = jobPayload.results[0] ? await listJobEvents(jobPayload.results[0].id, 80) : null;
         if (!active) {
           return;
         }
         setUser(currentUser);
         setJobs(jobPayload.results);
         setSelectedJob(jobPayload.results[0] ?? null);
+        setEvents(eventPayload?.results ?? []);
         setState("ready");
       } catch (loadError) {
         if (!active) {
@@ -58,24 +76,32 @@ export function JobHub() {
     };
   }, [router]);
 
-  useEffect(() => {
-    if (user == null || state !== "ready") {
-      return undefined;
-    }
-    const workspaceId = user.active_workspace?.id;
-    const hasActiveJob = jobs.some((job) => !job.is_terminal) || (selectedJob != null && !selectedJob.is_terminal);
-    if (!hasActiveJob) {
-      return undefined;
-    }
+  const handleStreamJob = useEffectEvent((job: JobRun) => {
+    setSelectedJob((current) => (current?.id === job.id ? job : current));
+    setJobs((current) => {
+      const found = current.some((item) => item.id === job.id);
+      if (!found) {
+        return [job, ...current];
+      }
+      return current.map((item) => (item.id === job.id ? job : item));
+    });
+  });
 
-    const intervalId = window.setInterval(() => {
-      void refreshJobs(workspaceId, selectedJob?.id ?? null);
-    }, 1500);
+  const handleStreamEvent = useEffectEvent((event: JobEvent) => {
+    setEvents((current) => {
+      if (current.some((item) => item.id === event.id)) {
+        return current;
+      }
+      return [...current, event].slice(-120);
+    });
+  });
 
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [jobs, selectedJob, state, user]);
+  useJobStream({
+    jobId: selectedJob?.id ?? null,
+    enabled: state === "ready" && selectedJob != null && !selectedJob.is_terminal,
+    onJob: handleStreamJob,
+    onEvent: handleStreamEvent,
+  });
 
   async function refreshJobs(workspaceId?: number, focusJobId: number | null = null) {
     const listPayload = await listJobs(workspaceId, 20);
@@ -88,6 +114,8 @@ export function JobHub() {
     }
     const detail = await getJob(nextSelectedId);
     setSelectedJob(detail);
+    const eventPayload = await listJobEvents(nextSelectedId, 80);
+    setEvents(eventPayload.results);
   }
 
   async function handleLaunch(event: FormEvent<HTMLFormElement>) {
@@ -118,10 +146,45 @@ export function JobHub() {
   async function handleSelectJob(jobId: number) {
     try {
       setError(null);
-      const detail = await getJob(jobId);
+      const [detail, eventPayload] = await Promise.all([getJob(jobId), listJobEvents(jobId, 80)]);
       setSelectedJob(detail);
+      setEvents(eventPayload.results);
     } catch (loadError) {
       setError(formatApiError(loadError, "Unable to load the selected job."));
+    }
+  }
+
+  async function handleCancelSelectedJob() {
+    if (selectedJob == null) {
+      return;
+    }
+    setJobAction("cancel");
+    setError(null);
+    try {
+      const updated = await cancelJob(selectedJob.id);
+      setSelectedJob(updated);
+      await refreshJobs(user?.active_workspace?.id, updated.id);
+    } catch (cancelError) {
+      setError(formatApiError(cancelError, "Unable to request job cancellation."));
+    } finally {
+      setJobAction(null);
+    }
+  }
+
+  async function handleRetrySelectedJob() {
+    if (selectedJob == null) {
+      return;
+    }
+    setJobAction("retry");
+    setError(null);
+    try {
+      const retried = await retryJob(selectedJob.id);
+      setSelectedJob(retried);
+      await refreshJobs(user?.active_workspace?.id, retried.id);
+    } catch (retryError) {
+      setError(formatApiError(retryError, "Unable to retry this job."));
+    } finally {
+      setJobAction(null);
     }
   }
 
@@ -178,7 +241,7 @@ export function JobHub() {
         <p style={bodyStyle}>
           Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. This
           smoke task exercises the first job pipeline end to end: API request, persisted job
-          record, Celery execution, progress updates, retries, and terminal state polling.
+          record, Celery execution, timeline events, retries, and live status streaming.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -278,6 +341,20 @@ export function JobHub() {
                     </div>
                   ) : null}
 
+                  <div style={actionRowStyle}>
+                    {!selectedJob.is_terminal ? (
+                      <button type="button" style={buttonStyle} onClick={() => void handleCancelSelectedJob()} disabled={jobAction === "cancel"}>
+                        {jobAction === "cancel" ? "Cancelling..." : "Request cancel"}
+                      </button>
+                    ) : null}
+                    {selectedJob.is_terminal && selectedJob.job_type === "smoke_test" ? (
+                      <button type="button" style={buttonStyle} onClick={() => void handleRetrySelectedJob()} disabled={jobAction === "retry"}>
+                        {jobAction === "retry" ? "Retrying..." : "Retry smoke job"}
+                      </button>
+                    ) : null}
+                    {selectedJob.cancellation_requested ? <span style={pillStyle}>Cancellation requested</span> : null}
+                  </div>
+
                   <div style={detailGridStyle}>
                     <div style={detailCardStyle}>
                       <p style={sectionLabelStyle}>Requested payload</p>
@@ -299,6 +376,11 @@ export function JobHub() {
                       </pre>
                     </div>
                   </div>
+
+                  <div style={detailCardStyle}>
+                    <p style={sectionLabelStyle}>Timeline</p>
+                    <JobTimeline events={events} emptyMessage="Timeline events will appear once the worker starts." />
+                  </div>
                 </div>
               ) : (
                 <p style={bodyStyle}>Launch a smoke task to create your first tracked job.</p>
@@ -313,7 +395,7 @@ export function JobHub() {
                   <p style={sectionLabelStyle}>Recent jobs</p>
                   <h2 style={statusTitleStyle}>{jobs.length}</h2>
                 </div>
-                <span style={pillStyle}>Auto-polls active jobs</span>
+                <span style={pillStyle}>Streaming selected job</span>
               </div>
 
               <div style={jobListStyle}>

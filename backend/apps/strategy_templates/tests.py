@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from apps.collaboration.models import ReviewStatus
 from apps.backtests.models import BacktestRun
 from apps.jobs.models import JobRun
 from apps.screens.models import ScreenRun
@@ -93,6 +94,16 @@ class StrategyTemplateApiTests(TestCase):
         self.assertEqual(updated.json()["name"], "Updated Growth Screen")
         self.assertEqual(updated.json()["tags"], ["favorite", "screen"])
         self.assertEqual(updated.json()["notes"], "Promoted after review.")
+
+        reviewed = self.client.patch(
+            f"/api/v1/strategy-templates/{template_id}/",
+            data={"review_status": ReviewStatus.APPROVED, "review_notes": "Approved for workspace reuse."},
+            content_type="application/json",
+        )
+        self.assertEqual(reviewed.status_code, 200)
+        self.assertEqual(reviewed.json()["review_status"], ReviewStatus.APPROVED)
+        self.assertEqual(reviewed.json()["reviewed_by_id"], self.user.id)
+        self.assertEqual(reviewed.json()["review_notes"], "Approved for workspace reuse.")
 
         listing = self.client.get(f"/api/v1/strategy-templates/?workspace_id={self.workspace.id}&starred_only=true")
         self.assertEqual(listing.status_code, 200)

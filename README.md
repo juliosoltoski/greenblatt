@@ -58,13 +58,14 @@ Useful URLs:
 - `http://localhost:8080/` - frontend placeholder
 - `http://localhost:8080/login` - sign-in page
 - `http://localhost:8080/app` - protected app shell
-- `http://localhost:8080/app/jobs` - Celery smoke-job launcher and status polling UI
+- `http://localhost:8080/app/jobs` - Celery smoke-job launcher with live timeline streaming, cancel, and retry
 - `http://localhost:8080/app/screens` - real screening launcher and persisted result review
 - `http://localhost:8080/app/backtests` - persisted backtest launcher with equity curve and trade review
 - `http://localhost:8080/app/templates` - reusable screen and backtest templates
 - `http://localhost:8080/app/history` - prior run history with compare and template actions
+- `http://localhost:8080/app/collaboration` - workspace activity feed and curated collections
 - `http://localhost:8080/app/schedules` - recurring template schedules backed by `django-celery-beat`
-- `http://localhost:8080/app/alerts` - alert-rule management and recent notification delivery history
+- `http://localhost:8080/app/alerts` - alert routing, digests, workspace defaults, and recent delivery history
 - `http://localhost:8080/health/live/` - backend liveness
 - `http://localhost:8080/health/ready/` - backend readiness
 - `http://localhost:9001/` - MinIO console
@@ -81,6 +82,20 @@ Each new Django user automatically gets a personal workspace and an owner member
 
 Email notifications default to Django's console backend in local development. To deliver real email,
 set the SMTP-related variables from [.env.example](/home/jsoltoski/greenblatt/.env.example) before starting the stack.
+
+Collaboration and sharing now include:
+
+- comments and collections for templates, screen runs, and backtest runs
+- read-only share links under `/shared/<token>`
+- review states for templates and schedules
+- workspace activity feed at `/app/collaboration`
+
+Notification UX now includes:
+
+- workspace-level email, Slack webhook, generic webhook, and digest preferences
+- user-level channel opt-in controls
+- live SSE job updates on the jobs dashboard and run detail pages
+- digest delivery through the hourly beat task `automation.send_notification_digests`
 
 Provider selection for the web stack is environment-driven:
 

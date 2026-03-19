@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from rest_framework import serializers
 
-from apps.automation.models import AlertRule, NotificationEvent
+from apps.automation.models import AlertRule, NotificationEvent, RunSchedule
+from apps.collaboration.models import ReviewStatus
 
 
 CRON_FIELD_PATTERN = re.compile(r"^[A-Za-z0-9_*/,\-]+$")
@@ -42,9 +43,17 @@ class RunScheduleCreateSerializer(serializers.Serializer):
     cron_day_of_month = serializers.CharField(required=False, default="*", max_length=64)
     cron_month_of_year = serializers.CharField(required=False, default="*", max_length=64)
     is_enabled = serializers.BooleanField(required=False, default=True)
+    notify_channel = serializers.ChoiceField(
+        choices=RunSchedule.NotificationChannel.choices,
+        required=False,
+        default=RunSchedule.NotificationChannel.EMAIL,
+    )
     notify_email = serializers.EmailField(required=False, allow_blank=True, default="")
+    notify_webhook_url = serializers.URLField(required=False, allow_blank=True, default="")
     notify_on_success = serializers.BooleanField(required=False, default=True)
     notify_on_failure = serializers.BooleanField(required=False, default=True)
+    review_status = serializers.ChoiceField(choices=ReviewStatus.choices, required=False, default=ReviewStatus.DRAFT)
+    review_notes = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate_timezone(self, value: str) -> str:
         try:
@@ -67,6 +76,14 @@ class RunScheduleCreateSerializer(serializers.Serializer):
 
     def validate_cron_month_of_year(self, value: str) -> str:
         return _validate_cron_field(value, "cron_month_of_year")
+
+    def validate(self, attrs):
+        channel = attrs.get("notify_channel", RunSchedule.NotificationChannel.EMAIL)
+        attrs["notify_email"] = attrs.get("notify_email", "").strip()
+        attrs["notify_webhook_url"] = attrs.get("notify_webhook_url", "").strip()
+        if channel == RunSchedule.NotificationChannel.EMAIL:
+            attrs["notify_webhook_url"] = attrs.get("notify_webhook_url", "")
+        return attrs
 
 
 class RunScheduleUpdateSerializer(RunScheduleCreateSerializer):
@@ -91,8 +108,10 @@ class AlertRuleCreateSerializer(serializers.Serializer):
         allow_blank=True,
         default=AlertRule.WorkflowKind.ANY,
     )
+    channel = serializers.ChoiceField(choices=AlertRule.Channel.choices, required=False, default=AlertRule.Channel.EMAIL)
     strategy_template_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     destination_email = serializers.EmailField(required=False, allow_blank=True, default="")
+    destination_webhook_url = serializers.URLField(required=False, allow_blank=True, default="")
     ticker = serializers.CharField(required=False, allow_blank=True, max_length=32, default="")
     top_n_threshold = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=500)
     is_enabled = serializers.BooleanField(required=False, default=True)
@@ -115,6 +134,8 @@ class AlertRuleCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"top_n_threshold": "A top-N threshold is required for this alert."})
         else:
             attrs["ticker"] = ticker
+        attrs["destination_email"] = attrs.get("destination_email", "").strip()
+        attrs["destination_webhook_url"] = attrs.get("destination_webhook_url", "").strip()
         attrs["ticker"] = ticker
         return attrs
 
@@ -137,3 +158,26 @@ class AlertRuleUpdateSerializer(AlertRuleCreateSerializer):
 class NotificationEventListSerializer(PaginationSerializer):
     workspace_id = serializers.IntegerField(required=False, min_value=1)
     status = serializers.ChoiceField(choices=[("", "Any"), *NotificationEvent.Status.choices], required=False)
+
+
+class WorkspaceNotificationPreferenceSerializer(serializers.Serializer):
+    workspace_id = serializers.IntegerField(required=False, min_value=1)
+    default_email = serializers.EmailField(required=False, allow_blank=True)
+    email_enabled = serializers.BooleanField(required=False)
+    slack_enabled = serializers.BooleanField(required=False)
+    webhook_enabled = serializers.BooleanField(required=False)
+    slack_webhook_url = serializers.URLField(required=False, allow_blank=True)
+    generic_webhook_url = serializers.URLField(required=False, allow_blank=True)
+    digest_enabled = serializers.BooleanField(required=False)
+    digest_hour_utc = serializers.IntegerField(required=False, min_value=0, max_value=23)
+    notify_on_run_success = serializers.BooleanField(required=False)
+    notify_on_run_failure = serializers.BooleanField(required=False)
+
+
+class UserNotificationPreferenceSerializer(serializers.Serializer):
+    workspace_id = serializers.IntegerField(required=False, min_value=1)
+    delivery_email = serializers.EmailField(required=False, allow_blank=True)
+    email_enabled = serializers.BooleanField(required=False)
+    slack_enabled = serializers.BooleanField(required=False)
+    webhook_enabled = serializers.BooleanField(required=False)
+    digest_enabled = serializers.BooleanField(required=False)

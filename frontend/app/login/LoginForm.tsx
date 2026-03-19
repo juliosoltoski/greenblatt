@@ -35,8 +35,8 @@ export function LoginForm() {
         <p style={eyebrowStyle}>Sign in</p>
         <h1 style={titleStyle}>Access your workspace</h1>
         <p style={bodyStyle}>
-          M2 adds session auth, per-user workspaces, and role-aware access control. Sign in with a
-          Django user to enter the protected shell.
+          The public landing page introduces the product. This sign-in flow enters the authenticated
+          research shell with saved universes, runs, templates, provider diagnostics, and settings.
         </p>
 
         <form onSubmit={handleSubmit} style={formStyle}>

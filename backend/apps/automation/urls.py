@@ -7,6 +7,8 @@ from apps.automation.views import (
     RunScheduleDetailView,
     RunScheduleListCreateView,
     RunScheduleTriggerView,
+    UserNotificationPreferenceView,
+    WorkspaceNotificationPreferenceView,
 )
 
 
@@ -17,4 +19,6 @@ urlpatterns = [
     path("alert-rules/", AlertRuleListCreateView.as_view(), name="alert-rule-list"),
     path("alert-rules/<int:rule_id>/", AlertRuleDetailView.as_view(), name="alert-rule-detail"),
     path("notification-events/", NotificationEventListView.as_view(), name="notification-event-list"),
+    path("preferences/workspace/", WorkspaceNotificationPreferenceView.as_view(), name="workspace-notification-preference"),
+    path("preferences/me/", UserNotificationPreferenceView.as_view(), name="user-notification-preference"),
 ]

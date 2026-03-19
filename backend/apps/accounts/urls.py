@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.accounts.views import CsrfTokenView, CurrentUserView, LoginView, LogoutView
+from apps.accounts.views import AccountSettingsView, CsrfTokenView, CurrentUserView, LoginView, LogoutView
 
 
 urlpatterns = [
@@ -8,4 +8,5 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="auth-login"),
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("me/", CurrentUserView.as_view(), name="auth-me"),
+    path("settings/", AccountSettingsView.as_view(), name="auth-settings"),
 ]

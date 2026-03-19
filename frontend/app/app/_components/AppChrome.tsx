@@ -43,8 +43,16 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Workspace",
+    items: [{ href: "/app/collaboration", label: "Collaboration" }],
+  },
+  {
     label: "Settings",
-    items: [{ href: "http://localhost:8000/admin/", label: "Django admin" }],
+    items: [
+      { href: "/app/providers", label: "Providers" },
+      { href: "/app/settings", label: "Settings" },
+      { href: "http://localhost:8000/admin/", label: "Django admin" },
+    ],
   },
 ];
 

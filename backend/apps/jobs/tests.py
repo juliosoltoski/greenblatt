@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from apps.jobs.models import JobRun
+from apps.jobs.models import JobEvent, JobRun
 from apps.jobs.retries import RetryableJobError, error_code_for_exception, is_retryable_exception, next_retry_delay_seconds
 from apps.jobs.tasks import run_smoke_job
 from apps.workspaces.models import WorkspaceMembership
@@ -49,6 +49,8 @@ class JobTaskLifecycleTests(TestCase):
         self.assertEqual(job.state, JobRun.State.SUCCEEDED)
         self.assertEqual(job.progress_percent, 100)
         self.assertEqual(job.metadata["result"]["message"], "Smoke task completed successfully.")
+        self.assertTrue(JobEvent.objects.filter(job=job, event_type="succeeded").exists())
+        self.assertTrue(JobEvent.objects.filter(job=job, event_type="progress").exists())
 
     @patch("apps.jobs.tasks.time.sleep", return_value=None)
     def test_smoke_task_marks_job_failed(self, _sleep) -> None:
@@ -69,6 +71,7 @@ class JobTaskLifecycleTests(TestCase):
         self.assertEqual(job.state, JobRun.State.FAILED)
         self.assertEqual(job.error_code, "runtime_error")
         self.assertIn("Synthetic smoke failure requested.", job.error_message)
+        self.assertTrue(JobEvent.objects.filter(job=job, event_type="failed").exists())
 
 
 class JobApiTests(TestCase):
@@ -148,3 +151,64 @@ class JobApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_cancel_job_marks_cancellation_requested(self) -> None:
+        job = JobRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="smoke_test",
+            metadata={"request": {"step_count": 2, "step_delay_ms": 10, "failure_mode": "success"}},
+        )
+
+        response = self.client.post(f"/api/v1/jobs/{job.id}/cancel/")
+
+        self.assertEqual(response.status_code, 200)
+        job.refresh_from_db()
+        self.assertIsNotNone(job.cancel_requested_at)
+        self.assertEqual(job.cancel_requested_by_id, self.user.id)
+        self.assertTrue(JobEvent.objects.filter(job=job, event_type="cancel_requested").exists())
+
+    @patch("apps.jobs.services.run_smoke_job.apply_async")
+    def test_retry_endpoint_requeues_smoke_job(self, apply_async) -> None:
+        apply_async.return_value = SimpleNamespace(id="retry-task-123")
+        job = JobRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="smoke_test",
+            state=JobRun.State.FAILED,
+            error_message="Synthetic failure",
+            metadata={"request": {"step_count": 2, "step_delay_ms": 10, "failure_mode": "success"}},
+        )
+
+        response = self.client.post(f"/api/v1/jobs/{job.id}/retry/")
+
+        self.assertEqual(response.status_code, 202)
+        payload = response.json()
+        self.assertNotEqual(payload["id"], job.id)
+        self.assertEqual(payload["job_type"], "smoke_test")
+        self.assertEqual(payload["celery_task_id"], "retry-task-123")
+        self.assertTrue(JobEvent.objects.filter(job_id=payload["id"], event_type="retry_spawned").exists())
+
+    @patch("apps.jobs.tasks.time.sleep", return_value=None)
+    def test_job_events_and_stream_endpoints(self, _sleep) -> None:
+        job = JobRun.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            job_type="smoke_test",
+            metadata={"request": {"failure_mode": "success"}},
+        )
+        run_smoke_job.apply(
+            kwargs={"job_run_id": job.id, "step_count": 2, "step_delay_ms": 0, "failure_mode": "success"},
+            throw=False,
+        )
+
+        events = self.client.get(f"/api/v1/jobs/{job.id}/events/")
+        self.assertEqual(events.status_code, 200)
+        self.assertGreaterEqual(events.json()["count"], 3)
+        self.assertEqual(events.json()["results"][-1]["event_type"], "succeeded")
+
+        stream = self.client.get(f"/api/v1/jobs/{job.id}/stream/")
+        self.assertEqual(stream.status_code, 200)
+        payload = b"".join(stream.streaming_content).decode("utf-8")
+        self.assertIn("event: job", payload)
+        self.assertIn("event: job_event", payload)

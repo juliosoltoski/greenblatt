@@ -1,21 +1,27 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { startTransition, useEffect, useEffectEvent, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
   ApiError,
+  cancelJob,
   createStrategyTemplate,
   getCurrentUser,
   getScreenRun,
+  listJobEvents,
   listScreenExclusions,
   listScreenRows,
   updateScreenRun,
+  type JobEvent,
   type ScreenExclusion,
   type ScreenResultRow,
   type ScreenRun,
 } from "@/lib/api";
+import { JobTimeline } from "@/app/app/_components/JobTimeline";
+import { ResourceCollaborationPanel } from "@/app/app/_components/ResourceCollaborationPanel";
+import { useJobStream } from "@/lib/jobStream";
 import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
@@ -43,6 +49,7 @@ const DEFAULT_TABLE_PREFERENCE: TablePreference = {
 export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
   const router = useRouter();
   const [screenRun, setScreenRun] = useState<ScreenRun | null>(null);
+  const [events, setEvents] = useState<JobEvent[]>([]);
   const [rows, setRows] = useState<ScreenResultRow[]>([]);
   const [exclusions, setExclusions] = useState<ScreenExclusion[]>([]);
   const [rowCount, setRowCount] = useState(0);
@@ -61,6 +68,7 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [jobAction, setJobAction] = useState<"cancel" | null>(null);
 
   useEffect(() => {
     const preference = readViewPreference<TablePreference>("screen-run-detail", DEFAULT_TABLE_PREFERENCE);
@@ -121,19 +129,28 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
     };
   }, [exclusionPage, rowDirection, rowPage, rowPageSize, rowSort, router, screenRunId]);
 
-  useEffect(() => {
-    if (screenRun == null || screenRun.job.is_terminal || state !== "ready") {
-      return undefined;
-    }
+  const handleStreamJob = useEffectEvent((job: ScreenRun["job"]) => {
+    setScreenRun((current) => (current ? { ...current, job } : current));
+  });
 
-    const intervalId = window.setInterval(() => {
+  const handleStreamEvent = useEffectEvent((event: JobEvent) => {
+    setEvents((current) => {
+      if (current.some((item) => item.id === event.id)) {
+        return current;
+      }
+      return [...current, event].slice(-120);
+    });
+  });
+
+  useJobStream({
+    jobId: screenRun?.job.id ?? null,
+    enabled: state === "ready" && screenRun != null && !screenRun.job.is_terminal,
+    onJob: handleStreamJob,
+    onEvent: handleStreamEvent,
+    onError: () => {
       void refreshDetail();
-    }, 1500);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [screenRun, state]);
+    },
+  });
 
   const rowPageCount = Math.max(1, Math.ceil(rowCount / rowPageSize));
   const exclusionPageCount = Math.max(1, Math.ceil(exclusionCount / 25));
@@ -160,6 +177,7 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
     setScreenRun(payloads.run);
     setRows(payloads.rows.results);
     setExclusions(payloads.exclusions.results);
+    setEvents(payloads.events.results);
     setRowCount(payloads.rows.count);
     setExclusionCount(payloads.exclusions.count);
     if (syncAnnotations) {
@@ -219,6 +237,23 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
     }
   }
 
+  async function handleCancelJob() {
+    if (screenRun == null || screenRun.job.is_terminal) {
+      return;
+    }
+    setJobAction("cancel");
+    setError(null);
+    try {
+      const updatedJob = await cancelJob(screenRun.job.id);
+      setScreenRun((current) => (current ? { ...current, job: updatedJob } : current));
+      await refreshDetail();
+    } catch (cancelError) {
+      setError(formatApiError(cancelError, "Unable to request cancellation for this run."));
+    } finally {
+      setJobAction(null);
+    }
+  }
+
   if (state === "loading") {
     return (
       <main style={pageStyle}>
@@ -246,6 +281,8 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
       </main>
     );
   }
+
+  const dataQuality = extractDataQuality(screenRun.summary);
 
   return (
     <main style={pageStyle}>
@@ -295,7 +332,20 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
             <span>{screenRun.job.progress_percent}%</span>
             <span>{screenRun.job.current_step || "Pending"}</span>
           </div>
+          <div style={actionRowStyle}>
+            {!screenRun.job.is_terminal ? (
+              <button type="button" style={buttonStyle} onClick={() => void handleCancelJob()} disabled={jobAction === "cancel"}>
+                {jobAction === "cancel" ? "Requesting..." : "Request cancel"}
+              </button>
+            ) : null}
+            {screenRun.job.cancellation_requested ? <span style={pillStyle}>Cancellation requested</span> : null}
+          </div>
         </div>
+
+        <section style={sectionCardStyle}>
+          <p style={sectionLabelStyle}>Job timeline</p>
+          <JobTimeline events={events} emptyMessage="Timeline events appear after the worker starts the run." />
+        </section>
 
         <div style={summaryGridStyle}>
           <SummaryCard
@@ -324,6 +374,21 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
             detail={screenRun.tags.length > 0 ? screenRun.tags.join(", ") : "No tags yet"}
           />
         </div>
+
+        {dataQuality.warningCount > 0 ? (
+          <section style={calloutStyle}>
+            <p style={sectionLabelStyle}>Data quality</p>
+            <h2 style={tableTitleStyle}>{dataQuality.warningCount} warning{dataQuality.warningCount === 1 ? "" : "s"}</h2>
+            <div style={stackStyle}>
+              {dataQuality.warnings.map((warning) => (
+                <div key={warning.code} style={warningRowStyle}>
+                  <strong>{warning.code.replaceAll("_", " ")}</strong>
+                  <span>{warning.message}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <div style={layoutStyle}>
           <section style={sectionCardStyle}>
@@ -545,6 +610,12 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
             </section>
           </div>
         </div>
+
+        <ResourceCollaborationPanel
+          workspaceId={screenRun.workspace.id}
+          resourceKind="screen_run"
+          resourceId={screenRun.id}
+        />
       </section>
     </main>
   );
@@ -571,7 +642,8 @@ async function loadDetailPayloads(
     }),
     listScreenExclusions({ screenRunId, page: options.exclusionPage, pageSize: 25 }),
   ]);
-  return { run, rows, exclusions };
+  const events = await listJobEvents(run.job.id, 120);
+  return { run, rows, exclusions, events };
 }
 
 function summarizeExclusions(exclusions: ScreenExclusion[]): Array<{ reason: string; count: number }> {
@@ -614,6 +686,25 @@ function formatNumber(value: number | null): string {
     return "-";
   }
   return value.toFixed(4);
+}
+
+function extractDataQuality(summary: Record<string, unknown>): {
+  warningCount: number;
+  warnings: Array<{ code: string; message: string }>;
+} {
+  const payload = typeof summary.data_quality === "object" && summary.data_quality != null ? summary.data_quality : null;
+  const warningCount =
+    payload != null && typeof (payload as { warning_count?: unknown }).warning_count === "number"
+      ? ((payload as { warning_count: number }).warning_count ?? 0)
+      : 0;
+  const warnings = Array.isArray((payload as { warnings?: unknown } | null)?.warnings)
+    ? ((payload as { warnings: Array<{ code?: string; message?: string }> }).warnings ?? [])
+        .map((warning) => ({
+          code: warning.code ?? "warning",
+          message: warning.message ?? "A data quality warning was recorded for this run.",
+        }))
+    : [];
+  return { warningCount, warnings };
 }
 
 function stateBadgeStyle(state: ScreenRun["job"]["state"]): CSSProperties {
@@ -691,6 +782,22 @@ const statusCardStyle: CSSProperties = {
   background: "#f8fbff",
   border: "1px solid rgba(73, 98, 128, 0.18)",
   marginTop: "1.5rem",
+};
+
+const calloutStyle: CSSProperties = {
+  padding: "1.25rem",
+  borderRadius: "22px",
+  background: "#fff7e8",
+  border: "1px solid rgba(201, 140, 0, 0.22)",
+  marginTop: "1.5rem",
+  display: "grid",
+  gap: "0.85rem",
+};
+
+const warningRowStyle: CSSProperties = {
+  display: "grid",
+  gap: "0.2rem",
+  color: "#6a4a00",
 };
 
 const statusHeaderStyle: CSSProperties = {

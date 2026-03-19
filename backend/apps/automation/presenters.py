@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.automation.models import AlertRule, NotificationEvent, RunSchedule
+from apps.automation.models import AlertRule, NotificationEvent, RunSchedule, UserNotificationPreference, WorkspaceNotificationPreference
 from apps.strategy_templates.presenters import serialize_strategy_template
 from apps.workspaces.presenters import serialize_workspace
 
@@ -21,9 +21,15 @@ def serialize_run_schedule(schedule: RunSchedule) -> dict[str, object | None]:
         "cron_day_of_month": schedule.cron_day_of_month,
         "cron_month_of_year": schedule.cron_month_of_year,
         "is_enabled": schedule.is_enabled,
+        "notify_channel": schedule.notify_channel,
         "notify_email": schedule.notify_email,
+        "notify_webhook_url": schedule.notify_webhook_url or None,
         "notify_on_success": schedule.notify_on_success,
         "notify_on_failure": schedule.notify_on_failure,
+        "review_status": schedule.review_status,
+        "reviewed_by_id": schedule.reviewed_by_id,
+        "reviewed_at": schedule.reviewed_at.isoformat() if schedule.reviewed_at else None,
+        "review_notes": schedule.review_notes,
         "periodic_task_id": schedule.periodic_task_id,
         "periodic_task_name": periodic_task.name if periodic_task else None,
         "periodic_task_enabled": periodic_task.enabled if periodic_task else None,
@@ -51,6 +57,7 @@ def serialize_alert_rule(rule: AlertRule) -> dict[str, object | None]:
         "workflow_kind": rule.workflow_kind,
         "channel": rule.channel,
         "destination_email": rule.destination_email,
+        "destination_webhook_url": rule.destination_webhook_url or None,
         "ticker": rule.ticker or None,
         "top_n_threshold": rule.top_n_threshold,
         "is_enabled": rule.is_enabled,
@@ -73,6 +80,7 @@ def serialize_notification_event(event: NotificationEvent) -> dict[str, object |
         "event_type": event.event_type,
         "status": event.status,
         "recipient_email": event.recipient_email or None,
+        "recipient_webhook_url": event.recipient_webhook_url or None,
         "subject": event.subject,
         "body": event.body,
         "delivery_error": event.delivery_error or None,
@@ -80,4 +88,37 @@ def serialize_notification_event(event: NotificationEvent) -> dict[str, object |
         "sent_at": event.sent_at.isoformat() if event.sent_at else None,
         "created_at": event.created_at.isoformat(),
         "updated_at": event.updated_at.isoformat(),
+    }
+
+
+def serialize_workspace_notification_preference(preference: WorkspaceNotificationPreference) -> dict[str, object | None]:
+    return {
+        "workspace": serialize_workspace(preference.workspace),
+        "default_email": preference.default_email,
+        "email_enabled": preference.email_enabled,
+        "slack_enabled": preference.slack_enabled,
+        "webhook_enabled": preference.webhook_enabled,
+        "slack_webhook_url": preference.slack_webhook_url or None,
+        "generic_webhook_url": preference.generic_webhook_url or None,
+        "digest_enabled": preference.digest_enabled,
+        "digest_hour_utc": preference.digest_hour_utc,
+        "notify_on_run_success": preference.notify_on_run_success,
+        "notify_on_run_failure": preference.notify_on_run_failure,
+        "last_digest_sent_at": preference.last_digest_sent_at.isoformat() if preference.last_digest_sent_at else None,
+        "created_at": preference.created_at.isoformat(),
+        "updated_at": preference.updated_at.isoformat(),
+    }
+
+
+def serialize_user_notification_preference(preference: UserNotificationPreference) -> dict[str, object | None]:
+    return {
+        "workspace": serialize_workspace(preference.workspace),
+        "user_id": preference.user_id,
+        "delivery_email": preference.delivery_email,
+        "email_enabled": preference.email_enabled,
+        "slack_enabled": preference.slack_enabled,
+        "webhook_enabled": preference.webhook_enabled,
+        "digest_enabled": preference.digest_enabled,
+        "created_at": preference.created_at.isoformat(),
+        "updated_at": preference.updated_at.isoformat(),
     }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 
+from apps.collaboration.models import ReviewStatus
 from apps.universes.models import Universe
 from apps.workspaces.models import Workspace
 
@@ -42,6 +43,16 @@ class StrategyTemplate(models.Model):
     is_starred = models.BooleanField(default=False)
     tags = models.JSONField(default=list, blank=True)
     notes = models.TextField(blank=True)
+    review_status = models.CharField(max_length=32, choices=ReviewStatus.choices, default=ReviewStatus.DRAFT)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_strategy_templates",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.TextField(blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -51,6 +62,7 @@ class StrategyTemplate(models.Model):
         indexes = [
             models.Index(fields=["workspace", "workflow_kind", "updated_at"]),
             models.Index(fields=["workspace", "name"]),
+            models.Index(fields=["workspace", "review_status", "updated_at"]),
         ]
 
     def __str__(self) -> str:

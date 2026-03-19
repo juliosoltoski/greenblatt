@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from celery import shared_task
 
-from apps.automation.services import ScheduleService
+from apps.automation.services import NotificationService, ScheduleService
 
 
 @shared_task(name="automation.run_scheduled_template")
@@ -15,3 +15,8 @@ def run_scheduled_template(*, schedule_id: int) -> dict[str, object]:
         "job_id": run.job_id,
         "job_state": run.job.state,
     }
+
+
+@shared_task(name="automation.send_notification_digests")
+def send_notification_digests() -> dict[str, int]:
+    return {"sent_count": NotificationService().dispatch_pending_digests()}

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.collaboration.models import ReviewStatus
 from apps.strategy_templates.models import StrategyTemplate
 
 
 class StrategyTemplateListSerializer(serializers.Serializer):
     workspace_id = serializers.IntegerField(required=False, min_value=1)
     workflow_kind = serializers.ChoiceField(choices=StrategyTemplate.WorkflowKind.choices, required=False)
+    review_status = serializers.ChoiceField(choices=ReviewStatus.choices, required=False)
     page = serializers.IntegerField(required=False, default=1, min_value=1)
     page_size = serializers.IntegerField(required=False, default=20, min_value=1, max_value=100)
     starred_only = serializers.BooleanField(required=False)
@@ -25,6 +27,8 @@ class StrategyTemplateCreateSerializer(serializers.Serializer):
     is_starred = serializers.BooleanField(required=False, default=False)
     tags = serializers.ListField(child=serializers.CharField(max_length=50), required=False, allow_empty=True, default=list)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+    review_status = serializers.ChoiceField(choices=ReviewStatus.choices, required=False, default=ReviewStatus.DRAFT)
+    review_notes = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs):
         source_screen_run_id = attrs.get("source_screen_run_id")
@@ -69,6 +73,8 @@ class StrategyTemplateUpdateSerializer(serializers.Serializer):
     is_starred = serializers.BooleanField(required=False)
     tags = serializers.ListField(child=serializers.CharField(max_length=50), required=False, allow_empty=True)
     notes = serializers.CharField(required=False, allow_blank=True)
+    review_status = serializers.ChoiceField(choices=ReviewStatus.choices, required=False)
+    review_notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate_tags(self, value: list[str]) -> list[str]:
         normalized: list[str] = []

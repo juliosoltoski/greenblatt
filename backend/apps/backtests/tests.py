@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
@@ -251,6 +252,46 @@ class BacktestApiTests(TestCase):
         starred_listing = self.client.get(f"/api/v1/backtests/?workspace_id={self.workspace.id}&starred_only=true")
         self.assertEqual(starred_listing.status_code, 200)
         self.assertEqual(starred_listing.json()["count"], 1)
+
+    @override_settings(
+        REST_FRAMEWORK={
+            **settings.REST_FRAMEWORK,
+            "DEFAULT_THROTTLE_RATES": {
+                **settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"],
+                "launch": "1/hour",
+                "mutation": "10/hour",
+            },
+        }
+    )
+    @patch("apps.backtests.tasks.run_backtest_job.apply_async")
+    def test_non_launch_mutation_does_not_consume_backtest_launch_quota(self, apply_async) -> None:
+        apply_async.return_value = SimpleNamespace(id="backtest-task-456")
+
+        collection_response = self.client.post(
+            "/api/v1/collaboration/collections/",
+            data={
+                "workspace_id": self.workspace.id,
+                "name": "Throttle regression",
+                "description": "This should not consume launch quota.",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(collection_response.status_code, 201)
+
+        launch_response = self.client.post(
+            "/api/v1/backtests/",
+            data={
+                "workspace_id": self.workspace.id,
+                "universe_id": self.universe.id,
+                "start_date": "2024-01-05",
+                "end_date": "2025-02-14",
+                "portfolio_size": 10,
+                "benchmark": "^GSPC",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(launch_response.status_code, 202)
 
     def test_child_data_and_export_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
