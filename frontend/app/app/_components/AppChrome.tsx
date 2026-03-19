@@ -27,7 +27,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Assets",
+    label: "Library",
     items: [
       { href: "/app/universes", label: "Universes" },
       { href: "/app/templates", label: "Templates" },
@@ -43,15 +43,14 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Workspace",
+    label: "Team",
     items: [{ href: "/app/collaboration", label: "Collaboration" }],
   },
   {
     label: "Settings",
     items: [
-      { href: "/app/providers", label: "Providers" },
+      { href: "/app/providers", label: "Data sources" },
       { href: "/app/settings", label: "Settings" },
-      { href: "http://localhost:8000/admin/", label: "Django admin" },
     ],
   },
 ];
@@ -70,7 +69,7 @@ export function AppChrome({ children }: AppChromeProps) {
           <Link href="/app" style={brandLinkStyle}>
             Greenblatt
           </Link>
-          <p style={brandMetaStyle}>Magic Formula research workspace</p>
+          <p style={brandMetaStyle}>Systematic value research</p>
         </div>
 
         <nav aria-label="Primary" style={navGridStyle}>
@@ -119,33 +118,30 @@ function isActivePath(pathname: string, href: string): boolean {
 
 const frameStyle: CSSProperties = {
   minHeight: "100vh",
-  padding: "1.25rem 1rem 2rem",
+  padding: "0.85rem 0.85rem 1.5rem",
 };
 
 const chromeStyle: CSSProperties = {
   width: "min(1400px, 100%)",
   margin: "0 auto",
-  padding: "1rem 1.1rem",
-  borderRadius: "24px",
+  padding: "0.8rem 0.95rem",
+  borderRadius: "20px",
   background: "rgba(255, 255, 255, 0.82)",
   border: "1px solid rgba(73, 98, 128, 0.14)",
-  boxShadow: "0 18px 60px rgba(27, 43, 65, 0.08)",
+  boxShadow: "0 16px 44px rgba(27, 43, 65, 0.08)",
   backdropFilter: "blur(12px)",
-  position: "sticky",
-  top: "1rem",
-  zIndex: 10,
 };
 
 const brandBlockStyle: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "baseline",
-  gap: "1rem",
+  alignItems: "center",
+  gap: "0.75rem",
   flexWrap: "wrap",
 };
 
 const brandLinkStyle: CSSProperties = {
-  fontSize: "1.45rem",
+  fontSize: "1.2rem",
   fontWeight: 700,
   textDecoration: "none",
   letterSpacing: "-0.03em",
@@ -154,35 +150,41 @@ const brandLinkStyle: CSSProperties = {
 const brandMetaStyle: CSSProperties = {
   margin: 0,
   color: "#496280",
+  fontSize: "0.92rem",
 };
 
 const navGridStyle: CSSProperties = {
-  display: "grid",
-  gap: "0.9rem",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  marginTop: "1rem",
+  display: "flex",
+  gap: "0.7rem",
+  flexWrap: "wrap",
+  marginTop: "0.75rem",
 };
 
 const navGroupStyle: CSSProperties = {
-  display: "grid",
-  gap: "0.55rem",
-  padding: "0.85rem",
-  borderRadius: "18px",
+  display: "flex",
+  gap: "0.45rem",
+  alignItems: "center",
+  flexWrap: "wrap",
+  padding: "0.45rem 0.55rem",
+  borderRadius: "16px",
   background: "#f7fafc",
   border: "1px solid rgba(73, 98, 128, 0.12)",
 };
 
 const groupLabelStyle: CSSProperties = {
   margin: 0,
-  fontSize: "0.77rem",
+  fontSize: "0.72rem",
   letterSpacing: "0.12em",
   textTransform: "uppercase",
   color: "#5c728d",
+  padding: "0.28rem 0.45rem",
+  borderRadius: "999px",
+  background: "#eaf1f8",
 };
 
 const groupLinksStyle: CSSProperties = {
   display: "flex",
-  gap: "0.55rem",
+  gap: "0.4rem",
   flexWrap: "wrap",
 };
 
@@ -190,12 +192,13 @@ const navLinkStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  minHeight: "2.35rem",
-  padding: "0.55rem 0.8rem",
+  minHeight: "2rem",
+  padding: "0.45rem 0.75rem",
   borderRadius: "999px",
   textDecoration: "none",
   background: "#e7eef6",
   color: "#203247",
+  fontSize: "0.94rem",
 };
 
 const activeNavLinkStyle: CSSProperties = {
@@ -207,5 +210,5 @@ const activeNavLinkStyle: CSSProperties = {
 const contentStyle: CSSProperties = {
   width: "min(1400px, 100%)",
   margin: "0 auto",
-  paddingTop: "1.25rem",
+  paddingTop: "0.9rem",
 };

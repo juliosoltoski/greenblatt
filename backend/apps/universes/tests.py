@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
 from apps.universes.models import Universe, UniverseUpload
-from apps.universes.services import UniverseInputError, parse_ticker_text
+from apps.universes.builtin_sync import BuiltInUniverseSyncResult, sync_builtin_universes
+from apps.universes.services import ParsedTicker, UniverseInputError, parse_ticker_text
 from apps.workspaces.models import WorkspaceMembership
+from greenblatt.universe import UniverseProfile
 
 
 User = get_user_model()
@@ -31,6 +36,14 @@ class UniverseParsingTests(TestCase):
         self.assertEqual(exc.exception.detail, "Universe input contains invalid tickers.")
         self.assertIn("Line 2", exc.exception.errors[0])
 
+    def test_parse_ticker_text_normalizes_exchange_share_classes(self) -> None:
+        entries = parse_ticker_text("BBD.B.TO\nBRK.B\n")
+
+        self.assertEqual(
+            [entry.normalized_ticker for entry in entries],
+            ["BBD-B.TO", "BRK-B"],
+        )
+
 
 class UniverseApiTests(TestCase):
     def setUp(self) -> None:
@@ -43,7 +56,9 @@ class UniverseApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertTrue(any(item["key"] == "sector_tech" for item in payload["results"]))
+        self.assertTrue(any(item["key"] == "sector_industrials" for item in payload["results"]))
+        tech_profile = next(item for item in payload["results"] if item["key"] == "sector_tech")
+        self.assertEqual(tech_profile["label"], "US Technology Leaders")
         dynamic_profile = next(item for item in payload["results"] if item["key"] == "us_top_3000")
         self.assertEqual(dynamic_profile["estimated_entry_count"], 3000)
 
@@ -68,7 +83,13 @@ class UniverseApiTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(len(detail.json()["entries"]), 3)
 
-    def test_create_built_in_universe_from_packaged_profile(self) -> None:
+    @patch("apps.universes.services.resolve_builtin_profile_tickers")
+    def test_create_built_in_universe_from_dynamic_profile(self, resolve_builtin_profile_tickers_mock) -> None:
+        resolve_builtin_profile_tickers_mock.return_value = [
+            ParsedTicker(position=1, raw_ticker="MSFT", normalized_ticker="MSFT", inclusion_metadata={}),
+            ParsedTicker(position=2, raw_ticker="NVDA", normalized_ticker="NVDA", inclusion_metadata={}),
+        ]
+
         response = self.client.post(
             "/api/v1/universes/",
             data={
@@ -82,7 +103,7 @@ class UniverseApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         payload = response.json()
         self.assertEqual(payload["profile_key"], "sector_tech")
-        self.assertGreater(payload["entry_count"], 0)
+        self.assertEqual(payload["entry_count"], 2)
 
     def test_uploaded_universe_persists_source_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -184,3 +205,87 @@ class UniverseApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+
+class BuiltInUniverseSyncTests(TestCase):
+    def setUp(self) -> None:
+        self.user = User.objects.create_user(username="sync-owner", password="secret-pass-123")
+        self.workspace = self.user.workspace_memberships.get().workspace
+
+    @patch("apps.universes.builtin_sync.build_provider")
+    @patch("apps.universes.builtin_sync.list_profiles")
+    @patch("apps.universes.builtin_sync.resolve_builtin_profile_tickers")
+    def test_sync_builtin_universes_creates_and_updates_system_managed_universes(
+        self,
+        resolve_builtin_profile_tickers_mock,
+        list_profiles_mock,
+        build_provider_mock,
+    ) -> None:
+        tech_profile = UniverseProfile(
+            key="sector_tech",
+            label="US Technology Leaders",
+            description="Updated tech description",
+            source="live",
+            requires_live_data=True,
+        )
+        uk_profile = UniverseProfile(
+            key="uk_ftse100",
+            label="United Kingdom FTSE 100",
+            description="Updated UK description",
+            source="packaged",
+        )
+        list_profiles_mock.return_value = [tech_profile, uk_profile]
+        build_provider_mock.return_value = object()
+        resolve_builtin_profile_tickers_mock.side_effect = [
+            [
+                ParsedTicker(position=1, raw_ticker="MSFT", normalized_ticker="MSFT", inclusion_metadata={}),
+                ParsedTicker(position=2, raw_ticker="NVDA", normalized_ticker="NVDA", inclusion_metadata={}),
+            ],
+            [
+                ParsedTicker(position=1, raw_ticker="HSBA.L", normalized_ticker="HSBA.L", inclusion_metadata={}),
+                ParsedTicker(position=2, raw_ticker="SHEL.L", normalized_ticker="SHEL.L", inclusion_metadata={}),
+            ],
+        ]
+
+        existing = Universe.objects.create(
+            workspace=self.workspace,
+            created_by=self.user,
+            name="sector_tech",
+            description="Old description",
+            source_type=Universe.SourceType.BUILT_IN,
+            profile_key="sector_tech",
+            is_system_managed=True,
+            entry_count=1,
+        )
+        existing.entries.create(position=1, raw_ticker="OLD", normalized_ticker="OLD")
+
+        result = sync_builtin_universes(workspace=self.workspace)
+
+        self.assertEqual(result.created, 1)
+        self.assertEqual(result.updated, 1)
+        self.assertEqual(result.errors, [])
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.name, "US Technology Leaders")
+        self.assertEqual(existing.description, "Updated tech description")
+        self.assertEqual(existing.entry_count, 2)
+        self.assertEqual(
+            list(existing.entries.values_list("normalized_ticker", flat=True)),
+            ["MSFT", "NVDA"],
+        )
+
+        created = Universe.objects.get(workspace=self.workspace, profile_key="uk_ftse100", is_system_managed=True)
+        self.assertEqual(created.name, "United Kingdom FTSE 100")
+        self.assertEqual(created.entry_count, 2)
+        self.assertTrue(created.is_system_managed)
+
+    @patch("apps.universes.management.commands.sync_builtin_universes.sync_builtin_universes")
+    def test_sync_builtin_universes_command_respects_strict_mode(self, sync_builtin_universes_mock) -> None:
+        sync_builtin_universes_mock.return_value = BuiltInUniverseSyncResult(
+            created=0,
+            updated=0,
+            errors=["provider unavailable"],
+        )
+
+        with self.assertRaises(CommandError):
+            call_command("sync_builtin_universes", "--strict")

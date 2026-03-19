@@ -27,6 +27,9 @@ class FailoverProvider(MarketDataProvider):
     def get_us_equity_candidates(self, *, limit: int = 3_000):
         return self._call("get_us_equity_candidates", limit=limit)
 
+    def get_us_sector_candidates(self, *, sector: str, limit: int | None = None):
+        return self._call("get_us_sector_candidates", sector=sector, limit=limit)
+
     def check_health(self, *, probe: bool = False) -> ProviderHealth:
         primary_health = self.primary.check_health(probe=probe)
         if primary_health.state == "ok":

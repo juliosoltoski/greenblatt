@@ -156,7 +156,7 @@ export function AppShell() {
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Dashboard</p>
           <h1 style={titleStyle}>Loading your workspace</h1>
-          <p style={bodyStyle}>Collecting recent runs, templates, universes, and provider status.</p>
+          <p style={bodyStyle}>Gathering your latest research, templates, and market-data status.</p>
         </section>
       </main>
     );
@@ -189,9 +189,9 @@ export function AppShell() {
             <p style={eyebrowStyle}>Dashboard</p>
             <h1 style={titleStyle}>Welcome back, {user.display_name}</h1>
             <p style={bodyStyle}>
-              The app now guides the standard flow directly: create or refresh a universe, run a
-              screen with safe defaults, then backtest the shortlist before saving a template or
-              automation rule.
+              Move from idea to repeatable workflow in one place: refresh a universe, run a screen,
+              pressure-test the shortlist in a backtest, then save the approach as a reusable
+              template or schedule.
             </p>
           </div>
           <button type="button" style={secondaryButtonStyle} onClick={handleLogout}>
@@ -287,8 +287,8 @@ export function AppShell() {
           <section style={cardStyle}>
             <div style={cardHeaderStyle}>
               <div>
-                <p style={cardLabelStyle}>Providers</p>
-                <h2 style={cardTitleStyle}>Data status</h2>
+                <p style={cardLabelStyle}>Data sources</p>
+                <h2 style={cardTitleStyle}>Market data health</h2>
               </div>
               <Link href="/app/jobs" style={ghostLinkStyle}>
                 Open jobs
@@ -316,9 +316,9 @@ export function AppShell() {
                 <p style={cardLabelStyle}>Workspace</p>
                 <h2 style={cardTitleStyle}>{user.active_workspace?.name ?? "No workspace"}</h2>
               </div>
-              <a href="http://localhost:8000/admin/" style={ghostLinkStyle}>
-                Django admin
-              </a>
+              <Link href="/app/settings" style={ghostLinkStyle}>
+                Open settings
+              </Link>
             </div>
             <p style={metaStyle}>
               Role: <strong>{user.active_workspace?.role ?? "n/a"}</strong>

@@ -56,6 +56,7 @@ class Universe(models.Model):
         blank=True,
         related_name="source_universes",
     )
+    is_system_managed = models.BooleanField(default=False)
     is_starred = models.BooleanField(default=False)
     tags = models.JSONField(default=list, blank=True)
     notes = models.TextField(blank=True)

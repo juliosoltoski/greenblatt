@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
+
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils.text import slugify
@@ -9,6 +12,7 @@ from apps.workspaces.models import Workspace, WorkspaceMembership
 
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def _build_personal_workspace_slug(base_text: str) -> str:
@@ -38,3 +42,14 @@ def create_default_workspace_for_user(sender, instance, created, **kwargs) -> No
         user=instance,
         role=WorkspaceMembership.Role.OWNER,
     )
+
+    transaction.on_commit(lambda: _sync_builtins_after_workspace_create(workspace))
+
+
+def _sync_builtins_after_workspace_create(workspace: Workspace) -> None:
+    from apps.universes.builtin_sync import safe_sync_builtin_universes_for_workspace
+
+    try:
+        safe_sync_builtin_universes_for_workspace(workspace)
+    except Exception:
+        logger.exception("Workspace built-in universe sync failed for workspace %s", workspace.id)

@@ -312,8 +312,8 @@ export function UniverseHub() {
                         style={inputStyle}
                       >
                         {profiles.map((profile) => (
-                          <option key={profile.key} value={profile.key}>
-                            {profile.key}
+                        <option key={profile.key} value={profile.key}>
+                            {profile.label}
                           </option>
                         ))}
                       </select>
@@ -334,7 +334,7 @@ export function UniverseHub() {
                         }}
                       >
                         <div style={profileHeaderStyle}>
-                          <strong>{profile.key}</strong>
+                          <strong>{profile.label}</strong>
                           {profile.estimated_entry_count ? (
                             <span style={pillStyle}>{profile.estimated_entry_count.toLocaleString()} names</span>
                           ) : null}
@@ -539,7 +539,7 @@ export function UniverseHub() {
 }
 
 function selectedProfileLabel(profileKey: string, profiles: UniverseProfile[]): string {
-  return profiles.find((profile) => profile.key === profileKey)?.key ?? "Saved built-in universe";
+  return profiles.find((profile) => profile.key === profileKey)?.label ?? "Saved built-in universe";
 }
 
 function formatApiError(error: unknown, fallback: string): string {

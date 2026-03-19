@@ -52,6 +52,9 @@ class MarketDataProvider(ABC):
     def get_us_equity_candidates(self, *, limit: int = 3_000) -> list[str]:
         raise NotImplementedError
 
+    def get_us_sector_candidates(self, *, sector: str, limit: int | None = None) -> list[str]:
+        raise NotImplementedError(f"{self.provider_name} does not support sector-based universe candidates.")
+
     def check_health(self, *, probe: bool = False) -> ProviderHealth:
         state: ProviderHealthState = "unknown" if probe else "ok"
         detail = "Remote probe not implemented." if probe else None

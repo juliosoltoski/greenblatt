@@ -33,10 +33,10 @@ export function LoginForm() {
     <main style={shellStyle}>
       <section style={panelStyle}>
         <p style={eyebrowStyle}>Sign in</p>
-        <h1 style={titleStyle}>Access your workspace</h1>
+        <h1 style={titleStyle}>Welcome back</h1>
         <p style={bodyStyle}>
-          The public landing page introduces the product. This sign-in flow enters the authenticated
-          research shell with saved universes, runs, templates, provider diagnostics, and settings.
+          Sign in to access your saved universes, research history, templates, schedules, and
+          alerts.
         </p>
 
         <form onSubmit={handleSubmit} style={formStyle}>
@@ -75,9 +75,6 @@ export function LoginForm() {
           <Link href="/" style={ghostLinkStyle}>
             Return home
           </Link>
-          <a href="http://localhost:8000/admin/" style={ghostLinkStyle}>
-            Django admin
-          </a>
         </div>
       </section>
     </main>

@@ -129,6 +129,11 @@ class AlphaVantageProvider(MarketDataProvider):
             self._candidate_provider = YahooFinanceProvider(use_cache=False, refresh_cache=True)
         return self._candidate_provider.get_us_equity_candidates(limit=limit)
 
+    def get_us_sector_candidates(self, *, sector: str, limit: int | None = None) -> list[str]:
+        if self._candidate_provider is None:
+            self._candidate_provider = YahooFinanceProvider(use_cache=False, refresh_cache=True)
+        return self._candidate_provider.get_us_sector_candidates(sector=sector, limit=limit)
+
     def check_health(self, *, probe: bool = False) -> ProviderHealth:
         if not self.api_key:
             return ProviderHealth(

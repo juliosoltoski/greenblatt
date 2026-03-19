@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Greenblatt Web App",
-  description: "Deployable web scaffold for the Greenblatt screening platform.",
+  title: "Greenblatt",
+  description: "Research platform for value screening, backtesting, templates, and recurring workflows.",
 };
 
 export default function RootLayout({

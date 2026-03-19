@@ -2,16 +2,16 @@ import Link from "next/link";
 
 const featureCards = [
   {
-    title: "Research flows",
-    body: "Build universes, run Magic Formula screens, compare history, and backtest shortlisted ideas without leaving the app shell.",
+    title: "Find better candidates",
+    body: "Build investable universes, rank opportunities with the Magic Formula, and move from broad market scans to a focused shortlist.",
   },
   {
-    title: "Operations visibility",
-    body: "Inspect providers, queue pressure, health checks, metrics, alerts, schedules, and job timelines from one workspace.",
+    title: "Pressure-test the idea",
+    body: "Backtest shortlisted names, compare runs over time, and turn one-off experiments into repeatable research workflows.",
   },
   {
-    title: "Reusable process",
-    body: "Promote good runs into templates, automate them on schedules, and keep a structured research record instead of a raw export trail.",
+    title: "Keep research organized",
+    body: "Save templates, review past work, and schedule recurring runs so your process stays consistent instead of living in scattered exports.",
   },
 ];
 
@@ -50,7 +50,7 @@ export default function Home() {
               color: "#496280",
             }}
           >
-            Public Surface
+            Systematic value research
           </p>
           <div
             style={{
@@ -63,12 +63,12 @@ export default function Home() {
           >
             <div>
               <h1 style={{ margin: 0, fontSize: "clamp(2.4rem, 5vw, 4.35rem)", lineHeight: 0.96 }}>
-                Research workflows for a deployable Greenblatt stack
+                A clearer home for disciplined stock research
               </h1>
               <p style={{ maxWidth: "44rem", lineHeight: 1.7, color: "#334862", marginTop: "1rem" }}>
-                Greenblatt is now a full web product: saved universes, async screens and backtests,
-                templates, schedules, alerts, collaboration, provider diagnostics, and operator tooling.
-                The public site introduces the product; the authenticated app is where the research runs.
+                Greenblatt brings value screening, backtesting, saved templates, and recurring
+                research workflows into one workspace. Build a universe, rank candidates, test the
+                shortlist across history, and keep the process reusable.
               </p>
               <div style={{ marginTop: "1.4rem", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
                 <Link
@@ -99,10 +99,10 @@ export default function Home() {
                     textDecoration: "none",
                   }}
                 >
-                  Open app
+                  Open workspace
                 </Link>
-                <Link
-                  href="/app/providers"
+                <a
+                  href="#workflows"
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -114,8 +114,8 @@ export default function Home() {
                     textDecoration: "none",
                   }}
                 >
-                  Provider diagnostics
-                </Link>
+                  See workflow
+                </a>
               </div>
             </div>
 
@@ -131,17 +131,17 @@ export default function Home() {
             >
               <div>
                 <p style={{ margin: 0, color: "#5c728d", textTransform: "uppercase", letterSpacing: "0.1em", fontSize: "0.8rem" }}>
-                  Live shape
+                  Platform highlights
                 </p>
-                <h2 style={{ margin: "0.35rem 0 0", fontSize: "1.45rem" }}>What the product already supports</h2>
+                <h2 style={{ margin: "0.35rem 0 0", fontSize: "1.45rem" }}>What you can already do</h2>
               </div>
               <div style={{ display: "grid", gap: "0.75rem" }}>
                 {[
-                  "Saved universes, screens, and backtests",
-                  "Templates, history, and comparison workflows",
-                  "Schedules, alerts, notifications, and collaboration",
-                  "Provider diagnostics, cache warm jobs, and failover",
-                  "Health checks, metrics, admin, and staging scripts",
+                  "Create saved universes and reusable templates",
+                  "Run screens and backtests with persisted results",
+                  "Compare history and keep a structured research trail",
+                  "Schedule recurring workflows and delivery alerts",
+                  "Collaborate inside a shared research workspace",
                 ].map((item) => (
                   <div
                     key={item}
@@ -160,7 +160,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div style={{ marginTop: "2rem", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+        <div id="workflows" style={{ marginTop: "2rem", display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
           {featureCards.map((item) => (
             <article
               key={item.title}
@@ -194,10 +194,10 @@ export default function Home() {
               border: "1px solid rgba(73, 98, 128, 0.14)",
             }}
           >
-            <h2 style={{ marginTop: 0 }}>Public vs authenticated surface</h2>
+            <h2 style={{ marginTop: 0 }}>Private research workspace</h2>
             <p style={{ color: "#334862", lineHeight: 1.65 }}>
-              The landing page is intentionally public-facing. Research execution, saved data, and
-              collaboration stay inside the authenticated `/app` shell.
+              Saved research, recurring workflows, and collaboration stay inside the signed-in
+              workspace so your process remains private and organized.
             </p>
           </section>
           <section
@@ -208,10 +208,10 @@ export default function Home() {
               border: "1px solid rgba(73, 98, 128, 0.14)",
             }}
           >
-            <h2 style={{ marginTop: 0 }}>Research-only note</h2>
+            <h2 style={{ marginTop: 0 }}>Research-first by design</h2>
             <p style={{ color: "#334862", lineHeight: 1.65 }}>
-              The app supports research workflows and operational visibility. Live trading,
-              commercial billing, and public cloud deployment planning remain later work.
+              Greenblatt is built for idea generation, review, and repeatable research workflows.
+              Trade execution stays outside the product.
             </p>
           </section>
           <section
@@ -222,29 +222,11 @@ export default function Home() {
               border: "1px solid rgba(73, 98, 128, 0.14)",
             }}
           >
-            <h2 style={{ marginTop: 0 }}>Operational checks</h2>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-              <code
-                style={{
-                  padding: "0.55rem 0.75rem",
-                  borderRadius: "999px",
-                  background: "#162132",
-                  color: "#f5f7fb",
-                }}
-              >
-                /health/live/
-              </code>
-              <code
-                style={{
-                  padding: "0.55rem 0.75rem",
-                  borderRadius: "999px",
-                  background: "#dde6f0",
-                  color: "#162132",
-                }}
-              >
-                /health/ready/
-              </code>
-            </div>
+            <h2 style={{ marginTop: 0 }}>Built for repeatable work</h2>
+            <p style={{ color: "#334862", lineHeight: 1.65, marginBottom: 0 }}>
+              The platform is designed to turn one strong research pass into a reusable template,
+              a scheduled workflow, and a cleaner historical record.
+            </p>
           </section>
         </div>
       </section>

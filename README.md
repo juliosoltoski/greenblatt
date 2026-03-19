@@ -8,6 +8,9 @@ Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy
 - [product_plan.md](/home/jsoltoski/greenblatt/product_plan.md): product shape, architecture, and system design reference
 - [implementation_plan.md](/home/jsoltoski/greenblatt/implementation_plan.md): the original M0-M10 execution roadmap, now completed
 - [nice_to_have_implementation_plan.md](/home/jsoltoski/greenblatt/nice_to_have_implementation_plan.md): active post-M10 roadmap for product polish, UX, and deferred enhancements
+- [cloud_staging_plan.md](/home/jsoltoski/greenblatt/cloud_staging_plan.md): lower-cost AWS staging-only rollout plan for active development and very small user counts
+- [cloud_infrastructure_plan.md](/home/jsoltoski/greenblatt/cloud_infrastructure_plan.md): later AWS full live deployment plan after the staging-first phase
+- [commercial_content_plan.md](/home/jsoltoski/greenblatt/commercial_content_plan.md): future plan for more commercial page language, messaging, and UI copy cleanup
 - [contributor_guide.md](/home/jsoltoski/greenblatt/contributor_guide.md): where to change what across the shared core, backend, frontend, and infra
 - [manual_smoke_test_guide.md](/home/jsoltoski/greenblatt/manual_smoke_test_guide.md): consolidated manual verification paths for local and staging-oriented checks
 - [release_notes.md](/home/jsoltoski/greenblatt/release_notes.md): release-note convention and the latest shipped notes
@@ -16,7 +19,8 @@ Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy
 
 - Milestones `M0` through `M10` are implemented.
 - The current focus should shift from core platform delivery to UX simplification, workflow polish, collaboration, and documentation quality.
-- Public-cloud infrastructure and full live deployment should be planned in a separate future document rather than folded into the application roadmap.
+- Public-cloud planning is now split into [cloud_staging_plan.md](/home/jsoltoski/greenblatt/cloud_staging_plan.md) for the cheaper staging-first phase and [cloud_infrastructure_plan.md](/home/jsoltoski/greenblatt/cloud_infrastructure_plan.md) for the later full live rollout.
+- Commercial-facing copy and content cleanup now live in [commercial_content_plan.md](/home/jsoltoski/greenblatt/commercial_content_plan.md).
 
 ## Features
 
@@ -25,7 +29,7 @@ Python CLI for screening and simulating Joel Greenblatt's Magic Formula strategy
 - Optional 6-month momentum modes: `none`, `overlay`, and `filter`.
 - Tax-aware 51/53 week sell rules for simulation.
 - Multi-provider market data layer with Yahoo Finance by default, optional Alpha Vantage support, and provider failover.
-- Built-in universe profiles for a broad US screen and several starter international watchlists.
+- Built-in universe profiles for broad US coverage, larger regional watchlists, and live sector packs.
 
 ## Installation
 
@@ -180,11 +184,12 @@ greenblatt simulate --profile eu_benelux_nordic --start 2024-01-01 --end 2025-12
 Use `greenblatt universes` to list the bundled profiles:
 
 - `us_top_3000`: broad US listed equity universe ranked by market cap
-- `eu_benelux_nordic`: Benelux and Nordic starter watchlist
-- `india_nifty100`: India starter watchlist
-- `china_hk`: Shanghai, Shenzhen, and Hong Kong starter watchlist
-- `sector_tech`: global technology-focused starter list
-- `sector_healthcare`: global healthcare-focused starter list
+- `eu_benelux_nordic`, `india_nifty100`, `china_hk`: larger regional local-listing universes
+- `uk_ftse100`, `australia_asx200`, `canada_tsx_composite`: packaged major-market regional universes
+- `sector_tech`, `sector_healthcare`, `sector_industrials`, `sector_consumer_discretionary`
+- `sector_consumer_staples`, `sector_energy`, `sector_basic_materials`, `sector_real_estate`, `sector_telecommunications`
+
+The web app also refreshes system-managed built-in universes on backend startup with `python manage.py sync_builtin_universes`, so saved starter universes stay current with the packaged files and live sector definitions.
 
 ## CLI Overview
 

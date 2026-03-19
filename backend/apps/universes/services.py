@@ -18,12 +18,12 @@ from apps.workspaces.models import Workspace
 from greenblatt.providers.base import MarketDataProvider
 from greenblatt.providers.yahoo import YahooFinanceProvider
 from greenblatt.services import ProviderConfig, build_provider
-from greenblatt.universe import list_profiles, resolve_profile
+from greenblatt.universe import UniverseProfile, list_profiles, resolve_profile
 
 
 MAX_TICKER_COUNT = 10_000
 MAX_UPLOAD_BYTES = 1_000_000
-TICKER_PATTERN = re.compile(r"^[A-Z0-9^][A-Z0-9.\-=^]{0,24}$")
+TICKER_PATTERN = re.compile(r"^[A-Z0-9^][A-Z0-9.&\-=^]{0,24}$")
 IGNORED_HEADER_VALUES = {"ticker", "tickers", "symbol", "symbols"}
 
 
@@ -131,11 +131,10 @@ def list_builtin_profile_payloads() -> list[dict[str, object | None]]:
     static_provider = _StaticProfileProvider()
     for profile in list_profiles():
         preview_tickers: list[str] = []
-        estimated_entry_count: int | None = None
-        resolution_note: str | None = None
-        if profile.key == "us_top_3000":
-            estimated_entry_count = 3_000
-            resolution_note = "Resolved from live market data when the universe is created."
+        estimated_entry_count = profile.estimated_entry_count
+        resolution_note = profile.resolution_note
+        if profile.requires_live_data:
+            resolution_note = resolution_note or "Resolved from live market data when the universe is created or synced."
         else:
             tickers = resolve_profile(static_provider, profile.key)
             preview_tickers = tickers[:10]
@@ -143,6 +142,7 @@ def list_builtin_profile_payloads() -> list[dict[str, object | None]]:
         payloads.append(
             {
                 "key": profile.key,
+                "label": profile.label,
                 "description": profile.description,
                 "source": profile.source,
                 "estimated_entry_count": estimated_entry_count,
@@ -222,39 +222,53 @@ def parse_uploaded_ticker_file(upload_file: UploadedFile) -> tuple[list[ParsedTi
     return parse_ticker_text(text), raw_bytes
 
 
-def resolve_builtin_profile_tickers(profile_key: str, *, provider_config: ProviderConfig | None = None) -> list[ParsedTicker]:
-    profile_index = {profile.key: profile for profile in list_profiles()}
-    if profile_key not in profile_index:
+def resolve_builtin_profile_tickers(
+    profile_key: str,
+    *,
+    provider_config: ProviderConfig | None = None,
+    provider: MarketDataProvider | None = None,
+) -> list[ParsedTicker]:
+    profile_index: dict[str, UniverseProfile] = {profile.key: profile for profile in list_profiles()}
+    profile = profile_index.get(profile_key)
+    if profile is None:
         raise UniverseInputError("Unknown built-in universe profile.", [f"Unknown profile key: {profile_key}"])
 
-    if profile_key == "us_top_3000":
+    active_provider = provider
+    if active_provider is None and profile.requires_live_data:
         try:
-            provider = build_provider(provider_config or default_provider_config())
+            active_provider = build_provider(provider_config or default_provider_config())
         except Exception as exc:
             raise UniverseInputError(
                 "Unable to initialize the configured market data provider.",
                 [str(exc)],
             ) from exc
-    else:
-        provider = _StaticProfileProvider()
+    if active_provider is None:
+        active_provider = _StaticProfileProvider()
 
     try:
-        tickers = resolve_profile(provider, profile_key)
+        tickers = resolve_profile(active_provider, profile_key)
     except Exception as exc:
         raise UniverseInputError(
             "Unable to resolve the selected built-in profile.",
             [str(exc)],
         ) from exc
 
-    return [
-        ParsedTicker(
-            position=index,
-            raw_ticker=ticker,
-            normalized_ticker=ticker,
-            inclusion_metadata={"profile_key": profile_key},
+    entries: list[ParsedTicker] = []
+    seen: set[str] = set()
+    for ticker in tickers:
+        normalized = _normalize_ticker(ticker)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        entries.append(
+            ParsedTicker(
+                position=len(entries) + 1,
+                raw_ticker=ticker,
+                normalized_ticker=normalized,
+                inclusion_metadata={"profile_key": profile_key},
+            )
         )
-        for index, ticker in enumerate(dict.fromkeys(tickers), start=1)
-    ]
+    return entries
 
 
 class UniverseManagerService:

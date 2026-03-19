@@ -21,6 +21,7 @@ The product now has four main layers:
 ## App-Specific Ownership
 
 - Universe storage and parsing: [`backend/apps/universes/`](/home/jsoltoski/greenblatt/backend/apps/universes)
+- Built-in universe catalog and packaged ticker files: [`src/greenblatt/universe.py`](/home/jsoltoski/greenblatt/src/greenblatt/universe.py) and [`src/greenblatt/data/universes/`](/home/jsoltoski/greenblatt/src/greenblatt/data/universes)
 - Async job tracking and Celery glue: [`backend/apps/jobs/`](/home/jsoltoski/greenblatt/backend/apps/jobs)
 - Screen workflows: [`backend/apps/screens/`](/home/jsoltoski/greenblatt/backend/apps/screens) and [`frontend/app/app/screens/`](/home/jsoltoski/greenblatt/frontend/app/app/screens)
 - Backtest workflows: [`backend/apps/backtests/`](/home/jsoltoski/greenblatt/backend/apps/backtests) and [`frontend/app/app/backtests/`](/home/jsoltoski/greenblatt/frontend/app/app/backtests)
@@ -61,6 +62,8 @@ docker compose -f compose.yml -f compose.dev.yml up --build
 docker compose -f compose.yml -f compose.dev.yml exec backend python manage.py createsuperuser
 ```
 
+The backend startup command now runs `python manage.py sync_builtin_universes` after migrations. You can rerun it manually any time you change packaged universe files or built-in profile resolution.
+
 ## Verification Expectations
 
 For most feature work:
@@ -76,6 +79,9 @@ For most feature work:
 - [product_plan.md](/home/jsoltoski/greenblatt/product_plan.md): product and architecture reference
 - [implementation_plan.md](/home/jsoltoski/greenblatt/implementation_plan.md): completed M0-M10 delivery record
 - [nice_to_have_implementation_plan.md](/home/jsoltoski/greenblatt/nice_to_have_implementation_plan.md): active follow-on roadmap
+- [cloud_staging_plan.md](/home/jsoltoski/greenblatt/cloud_staging_plan.md): lower-cost staging-first AWS rollout plan
+- [cloud_infrastructure_plan.md](/home/jsoltoski/greenblatt/cloud_infrastructure_plan.md): later public-cloud and full live deployment plan
+- [commercial_content_plan.md](/home/jsoltoski/greenblatt/commercial_content_plan.md): future content and messaging polish plan
 - [manual_smoke_test_guide.md](/home/jsoltoski/greenblatt/manual_smoke_test_guide.md): consolidated manual verification flows
 - [release_notes.md](/home/jsoltoski/greenblatt/release_notes.md): release-note convention and current entries
 
@@ -83,4 +89,4 @@ For most feature work:
 
 Keep public-cloud infrastructure design separate from feature planning.
 
-When that work starts, create `cloud_infrastructure_plan.md` instead of expanding the existing product roadmap files.
+Those plans now live in [cloud_staging_plan.md](/home/jsoltoski/greenblatt/cloud_staging_plan.md) for the cheaper staging-first phase and [cloud_infrastructure_plan.md](/home/jsoltoski/greenblatt/cloud_infrastructure_plan.md) for the later full live phase. Commercial-facing content cleanup now lives in [commercial_content_plan.md](/home/jsoltoski/greenblatt/commercial_content_plan.md).

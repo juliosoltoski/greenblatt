@@ -154,6 +154,7 @@ class YahooFinanceProvider(MarketDataProvider):
         if self.use_cache:
             self.snapshot_cache_dir.mkdir(parents=True, exist_ok=True)
         self._snapshot_cache: dict[str, SecuritySnapshot] = {}
+        self._nasdaq_stock_screener_rows_cache: list[dict[str, Any]] | None = None
         logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
     def get_snapshots(
@@ -245,6 +246,21 @@ class YahooFinanceProvider(MarketDataProvider):
             seen.add(ticker)
             if len(ranked) >= limit:
                 break
+        return ranked[:limit]
+
+    def get_us_sector_candidates(self, *, sector: str, limit: int | None = None) -> list[str]:
+        target_sector = sector.strip().lower()
+        if not target_sector:
+            return []
+
+        rows = [
+            row
+            for row in self._fetch_nasdaq_stock_screener_rows()
+            if str(row.get("sector", "")).strip().lower() == target_sector
+        ]
+        ranked = self._rank_nasdaq_stock_rows(rows)
+        if limit is None:
+            return ranked
         return ranked[:limit]
 
     def check_health(self, *, probe: bool = False) -> ProviderHealth:
@@ -393,6 +409,8 @@ class YahooFinanceProvider(MarketDataProvider):
         return pd.DataFrame()
 
     def _fetch_nasdaq_stock_screener_rows(self) -> list[dict[str, Any]]:
+        if self._nasdaq_stock_screener_rows_cache is not None:
+            return list(self._nasdaq_stock_screener_rows_cache)
         self.rate_limiter.wait()
         response = retry(
             self.session.get,
@@ -406,7 +424,8 @@ class YahooFinanceProvider(MarketDataProvider):
         rows = data.get("rows") or []
         if not isinstance(rows, list):
             return []
-        return rows
+        self._nasdaq_stock_screener_rows_cache = rows
+        return list(rows)
 
     def _fetch_nasdaq_directory_tickers(self) -> list[str]:
         tickers: list[str] = []
@@ -582,6 +601,8 @@ class YahooFinanceProvider(MarketDataProvider):
 
         base, suffix = normalized.rsplit(".", 1)
         if suffix in KNOWN_YAHOO_EXCHANGE_SUFFIXES:
+            if "." in base and not any(char.isdigit() for char in base):
+                base = base.replace(".", "-")
             return f"{base}.{suffix}"
         if any(char.isdigit() for char in base):
             return f"{base}.{suffix}"
