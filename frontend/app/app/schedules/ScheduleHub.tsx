@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -67,6 +73,7 @@ export function ScheduleHub() {
   const [schedules, setSchedules] = useState<RunSchedule[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState<ScheduleFormState>(initialFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeScheduleId, setActiveScheduleId] = useState<number | null>(null);
@@ -103,7 +110,11 @@ export function ScheduleHub() {
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load schedules.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load schedules.",
+        );
         setState("error");
       }
     }
@@ -131,6 +142,7 @@ export function ScheduleHub() {
       return;
     }
     setError(null);
+    setNotice(null);
     setIsSubmitting(true);
     try {
       await createRunSchedule({
@@ -158,6 +170,9 @@ export function ScheduleHub() {
         timezone: user.active_workspace?.timezone ?? "UTC",
       });
       await refresh(user);
+      setNotice(
+        "Schedule saved. Your template is ready to run on a recurring cadence.",
+      );
     } catch (createError) {
       setError(formatApiError(createError, "Unable to create schedule."));
     } finally {
@@ -171,9 +186,11 @@ export function ScheduleHub() {
     }
     setActiveScheduleId(schedule.id);
     setError(null);
+    setNotice(null);
     try {
       await updateRunSchedule(schedule.id, { isEnabled: !schedule.is_enabled });
       await refresh(user);
+      setNotice(schedule.is_enabled ? "Schedule paused." : "Schedule enabled.");
     } catch (updateError) {
       setError(formatApiError(updateError, "Unable to update this schedule."));
     } finally {
@@ -189,15 +206,29 @@ export function ScheduleHub() {
     if (nextName == null || nextName.trim() === "") {
       return;
     }
-    const nextHour = window.prompt("cron_hour", schedule.cron_hour) ?? schedule.cron_hour;
-    const nextMinute = window.prompt("cron_minute", schedule.cron_minute) ?? schedule.cron_minute;
-    const nextDayOfWeek = window.prompt("cron_day_of_week", schedule.cron_day_of_week) ?? schedule.cron_day_of_week;
-    const nextChannel = window.prompt("Notification channel", schedule.notify_channel) ?? schedule.notify_channel;
-    const nextEmail = window.prompt("Notification email", schedule.notify_email) ?? schedule.notify_email;
-    const nextWebhook = window.prompt("Notification webhook URL", schedule.notify_webhook_url ?? "") ?? schedule.notify_webhook_url ?? "";
-    const nextReviewStatus = window.prompt("Review status", schedule.review_status) ?? schedule.review_status;
+    const nextHour =
+      window.prompt("Hour (24h)", schedule.cron_hour) ?? schedule.cron_hour;
+    const nextMinute =
+      window.prompt("Minute", schedule.cron_minute) ?? schedule.cron_minute;
+    const nextDayOfWeek =
+      window.prompt("Days of week", schedule.cron_day_of_week) ??
+      schedule.cron_day_of_week;
+    const nextChannel =
+      window.prompt("Alert channel", schedule.notify_channel) ??
+      schedule.notify_channel;
+    const nextEmail =
+      window.prompt("Alert email", schedule.notify_email) ??
+      schedule.notify_email;
+    const nextWebhook =
+      window.prompt("Alert webhook URL", schedule.notify_webhook_url ?? "") ??
+      schedule.notify_webhook_url ??
+      "";
+    const nextReviewStatus =
+      window.prompt("Review status", schedule.review_status) ??
+      schedule.review_status;
     setActiveScheduleId(schedule.id);
     setError(null);
+    setNotice(null);
     try {
       await updateRunSchedule(schedule.id, {
         name: nextName.trim(),
@@ -210,6 +241,7 @@ export function ScheduleHub() {
         reviewStatus: nextReviewStatus as RunSchedule["review_status"],
       });
       await refresh(user);
+      setNotice("Schedule updated.");
     } catch (updateError) {
       setError(formatApiError(updateError, "Unable to update this schedule."));
     } finally {
@@ -220,6 +252,7 @@ export function ScheduleHub() {
   async function handleTrigger(schedule: RunSchedule) {
     setActiveScheduleId(schedule.id);
     setError(null);
+    setNotice(null);
     try {
       const launched = await triggerRunSchedule(schedule.id);
       startTransition(() => {
@@ -230,21 +263,28 @@ export function ScheduleHub() {
         );
       });
     } catch (triggerError) {
-      setError(formatApiError(triggerError, "Unable to trigger this schedule."));
+      setError(
+        formatApiError(triggerError, "Unable to trigger this schedule."),
+      );
     } finally {
       setActiveScheduleId(null);
     }
   }
 
   async function handleDelete(schedule: RunSchedule) {
-    if (user == null || !window.confirm(`Delete schedule "${schedule.name}"?`)) {
+    if (
+      user == null ||
+      !window.confirm(`Delete schedule "${schedule.name}"?`)
+    ) {
       return;
     }
     setActiveScheduleId(schedule.id);
     setError(null);
+    setNotice(null);
     try {
       await deleteRunSchedule(schedule.id);
       await refresh(user);
+      setNotice("Schedule deleted.");
     } catch (deleteError) {
       setError(formatApiError(deleteError, "Unable to delete this schedule."));
     } finally {
@@ -257,7 +297,7 @@ export function ScheduleHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Schedules</p>
-          <h1 style={titleStyle}>Loading recurring templates</h1>
+          <h1 style={titleStyle}>Loading recurring workflows</h1>
         </section>
       </main>
     );
@@ -269,9 +309,11 @@ export function ScheduleHub() {
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Schedules</p>
           <h1 style={titleStyle}>Schedules unavailable</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load schedule management."}</p>
+          <p style={bodyStyle}>
+            {error ?? "Unable to open your schedule workspace."}
+          </p>
           <Link href="/app" style={primaryLinkStyle}>
-            Back to app
+            Back to dashboard
           </Link>
         </section>
       </main>
@@ -283,282 +325,444 @@ export function ScheduleHub() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M8 Scheduling</p>
-            <h1 style={titleStyle}>Recurring launches from saved templates</h1>
+            <p style={eyebrowStyle}>Schedules</p>
+            <h1 style={titleStyle}>
+              Keep proven workflows running on schedule
+            </h1>
           </div>
           <div style={actionRowStyle}>
-            <Link href="/app" style={ghostLinkStyle}>
-              App shell
-            </Link>
             <Link href="/app/templates" style={ghostLinkStyle}>
-              Templates
+              Open templates
             </Link>
             <Link href="/app/alerts" style={ghostLinkStyle}>
-              Alerts
+              Open alerts
+            </Link>
+            <Link href="/app" style={ghostLinkStyle}>
+              Dashboard
             </Link>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Save a cron-style schedule for any template, then use beat-driven launches for recurring
-          screens and backtests. The page also exposes a manual trigger so you can smoke-test a new
-          schedule immediately.
+          Attach a saved template to a recurring cadence so your best screens
+          and backtests keep running without manual setup each week. Use manual
+          launches when you want to test a new schedule before relying on it.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
+        {notice ? <p style={infoStyle}>{notice}</p> : null}
 
         <section style={sectionCardStyle}>
           <div style={cardHeaderStyle}>
             <div>
-              <p style={sectionLabelStyle}>Create schedule</p>
-              <h2 style={cardTitleStyle}>Attach a template to a recurring cadence</h2>
+              <p style={sectionLabelStyle}>Save schedule</p>
+              <h2 style={cardTitleStyle}>
+                Attach a template to a recurring cadence
+              </h2>
             </div>
-            <span style={pillStyle}>{templates.length} templates available</span>
+            <span style={pillStyle}>
+              {templates.length} templates available
+            </span>
           </div>
 
-          <form style={formGridStyle} onSubmit={handleCreate}>
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Template</span>
-              <select
-                value={form.templateId}
-                onChange={(event) => setForm((current) => ({ ...current, templateId: event.target.value }))}
-                style={inputStyle}
-                required
-              >
-                <option value="">Select a saved template</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name} ({template.workflow_kind})
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Name</span>
-              <input
-                value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                style={inputStyle}
-                placeholder="Weekly US Magic Formula"
-                required
-              />
-            </label>
-
-            <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-              <span style={labelStyle}>Description</span>
-              <input
-                value={form.description}
-                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                style={inputStyle}
-                placeholder="Optional notes for operators"
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Timezone</span>
-              <input
-                value={form.timezone}
-                onChange={(event) => setForm((current) => ({ ...current, timezone: event.target.value }))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>cron_minute</span>
-              <input
-                value={form.cronMinute}
-                onChange={(event) => setForm((current) => ({ ...current, cronMinute: event.target.value }))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>cron_hour</span>
-              <input
-                value={form.cronHour}
-                onChange={(event) => setForm((current) => ({ ...current, cronHour: event.target.value }))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>cron_day_of_week</span>
-              <input
-                value={form.cronDayOfWeek}
-                onChange={(event) => setForm((current) => ({ ...current, cronDayOfWeek: event.target.value }))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>cron_day_of_month</span>
-              <input
-                value={form.cronDayOfMonth}
-                onChange={(event) => setForm((current) => ({ ...current, cronDayOfMonth: event.target.value }))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>cron_month_of_year</span>
-              <input
-                value={form.cronMonthOfYear}
-                onChange={(event) => setForm((current) => ({ ...current, cronMonthOfYear: event.target.value }))}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-              <span style={labelStyle}>Notification channel</span>
-              <select
-                value={form.notifyChannel}
-                onChange={(event) => setForm((current) => ({ ...current, notifyChannel: event.target.value as RunSchedule["notify_channel"] }))}
-                style={inputStyle}
-              >
-                <option value="email">Email</option>
-                <option value="slack_webhook">Slack webhook</option>
-                <option value="webhook">Generic webhook</option>
-              </select>
-            </label>
-
-            <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-              <span style={labelStyle}>{form.notifyChannel === "email" ? "Notification email" : "Notification webhook URL"}</span>
-              {form.notifyChannel === "email" ? (
-                <input
-                  value={form.notifyEmail}
-                  onChange={(event) => setForm((current) => ({ ...current, notifyEmail: event.target.value }))}
-                  style={inputStyle}
-                  placeholder={user.email || "falls back to the account email"}
-                />
-              ) : (
-                <input
-                  value={form.notifyWebhookUrl}
-                  onChange={(event) => setForm((current) => ({ ...current, notifyWebhookUrl: event.target.value }))}
-                  style={inputStyle}
-                  placeholder="https://hooks.example.test/..."
-                />
-              )}
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Review status</span>
-              <select
-                value={form.reviewStatus}
-                onChange={(event) => setForm((current) => ({ ...current, reviewStatus: event.target.value as RunSchedule["review_status"] }))}
-                style={inputStyle}
-              >
-                <option value="draft">Draft</option>
-                <option value="in_review">In review</option>
-                <option value="approved">Approved</option>
-                <option value="changes_requested">Changes requested</option>
-              </select>
-            </label>
-
-            <label style={fieldStyle}>
-              <span style={labelStyle}>Review notes</span>
-              <input
-                value={form.reviewNotes}
-                onChange={(event) => setForm((current) => ({ ...current, reviewNotes: event.target.value }))}
-                style={inputStyle}
-                placeholder="Optional approval notes"
-              />
-            </label>
-
-            <label style={toggleStyle}>
-              <input
-                type="checkbox"
-                checked={form.notifyOnSuccess}
-                onChange={(event) => setForm((current) => ({ ...current, notifyOnSuccess: event.target.checked }))}
-              />
-              <span>Notify on success</span>
-            </label>
-
-            <label style={toggleStyle}>
-              <input
-                type="checkbox"
-                checked={form.notifyOnFailure}
-                onChange={(event) => setForm((current) => ({ ...current, notifyOnFailure: event.target.checked }))}
-              />
-              <span>Notify on failure</span>
-            </label>
-
-            <label style={toggleStyle}>
-              <input
-                type="checkbox"
-                checked={form.isEnabled}
-                onChange={(event) => setForm((current) => ({ ...current, isEnabled: event.target.checked }))}
-              />
-              <span>Enable immediately</span>
-            </label>
-
-            <div style={{ ...actionRowStyle, gridColumn: "1 / -1" }}>
-              <button type="submit" style={buttonStyle} disabled={isSubmitting || form.templateId === ""}>
-                {isSubmitting ? "Creating..." : "Create schedule"}
-              </button>
-              <span style={noteStyle}>Example workweek cadence: `0 13 * * 1-5`</span>
+          {templates.length === 0 ? (
+            <div style={emptyStateStyle}>
+              <p style={bodyStyle}>
+                No saved templates yet. Save a strong screen or backtest as a
+                template first, then come back here to run it on a schedule.
+              </p>
+              <div style={actionRowStyle}>
+                <Link href="/app/templates" style={primaryLinkStyle}>
+                  Open templates
+                </Link>
+                <Link href="/app/history" style={ghostLinkStyle}>
+                  Open history
+                </Link>
+              </div>
             </div>
-          </form>
+          ) : (
+            <form style={formGridStyle} onSubmit={handleCreate}>
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Template</span>
+                <select
+                  value={form.templateId}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      templateId: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                  required
+                >
+                  <option value="">Select a saved template</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} ({humanizeLabel(template.workflow_kind)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Name</span>
+                <input
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                  placeholder="Weekly US Magic Formula"
+                  required
+                />
+              </label>
+
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={labelStyle}>Description</span>
+                <input
+                  value={form.description}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                  placeholder="Why this recurring run matters"
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Timezone</span>
+                <input
+                  value={form.timezone}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      timezone: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Minute</span>
+                <input
+                  value={form.cronMinute}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      cronMinute: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Hour (24h)</span>
+                <input
+                  value={form.cronHour}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      cronHour: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Days of week</span>
+                <input
+                  value={form.cronDayOfWeek}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      cronDayOfWeek: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Day of month</span>
+                <input
+                  value={form.cronDayOfMonth}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      cronDayOfMonth: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Month</span>
+                <input
+                  value={form.cronMonthOfYear}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      cronMonthOfYear: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                />
+              </label>
+
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={labelStyle}>Alert channel</span>
+                <select
+                  value={form.notifyChannel}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      notifyChannel: event.target
+                        .value as RunSchedule["notify_channel"],
+                    }))
+                  }
+                  style={inputStyle}
+                >
+                  <option value="email">Email</option>
+                  <option value="slack_webhook">Slack webhook</option>
+                  <option value="webhook">Generic webhook</option>
+                </select>
+              </label>
+
+              <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <span style={labelStyle}>
+                  {form.notifyChannel === "email"
+                    ? "Alert email"
+                    : "Alert webhook URL"}
+                </span>
+                {form.notifyChannel === "email" ? (
+                  <input
+                    value={form.notifyEmail}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        notifyEmail: event.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                    placeholder={
+                      user.email || "falls back to the account email"
+                    }
+                  />
+                ) : (
+                  <input
+                    value={form.notifyWebhookUrl}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        notifyWebhookUrl: event.target.value,
+                      }))
+                    }
+                    style={inputStyle}
+                    placeholder="https://hooks.example.test/..."
+                  />
+                )}
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Review status</span>
+                <select
+                  value={form.reviewStatus}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      reviewStatus: event.target
+                        .value as RunSchedule["review_status"],
+                    }))
+                  }
+                  style={inputStyle}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="in_review">In review</option>
+                  <option value="approved">Approved</option>
+                  <option value="changes_requested">Changes requested</option>
+                </select>
+              </label>
+
+              <label style={fieldStyle}>
+                <span style={labelStyle}>Review notes</span>
+                <input
+                  value={form.reviewNotes}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      reviewNotes: event.target.value,
+                    }))
+                  }
+                  style={inputStyle}
+                  placeholder="Optional approval notes"
+                />
+              </label>
+
+              <label style={toggleStyle}>
+                <input
+                  type="checkbox"
+                  checked={form.notifyOnSuccess}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      notifyOnSuccess: event.target.checked,
+                    }))
+                  }
+                />
+                <span>Alert me when runs succeed</span>
+              </label>
+
+              <label style={toggleStyle}>
+                <input
+                  type="checkbox"
+                  checked={form.notifyOnFailure}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      notifyOnFailure: event.target.checked,
+                    }))
+                  }
+                />
+                <span>Alert me when runs fail</span>
+              </label>
+
+              <label style={toggleStyle}>
+                <input
+                  type="checkbox"
+                  checked={form.isEnabled}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      isEnabled: event.target.checked,
+                    }))
+                  }
+                />
+                <span>Enable schedule now</span>
+              </label>
+
+              <div style={{ ...actionRowStyle, gridColumn: "1 / -1" }}>
+                <button
+                  type="submit"
+                  style={buttonStyle}
+                  disabled={isSubmitting || form.templateId === ""}
+                >
+                  {isSubmitting ? "Saving..." : "Save schedule"}
+                </button>
+                <span style={noteStyle}>
+                  Example workweek schedule: `0 13 * * 1-5` runs at 13:00 UTC
+                  Monday through Friday.
+                </span>
+              </div>
+            </form>
+          )}
         </section>
 
         <section style={{ ...sectionCardStyle, marginTop: "1.5rem" }}>
           <div style={cardHeaderStyle}>
             <div>
               <p style={sectionLabelStyle}>Active schedules</p>
-              <h2 style={cardTitleStyle}>{schedules.length.toLocaleString()} configured schedules</h2>
+              <h2 style={cardTitleStyle}>
+                {schedules.length.toLocaleString()} configured schedules
+              </h2>
             </div>
-            <span style={pillStyle}>{schedules.filter((schedule) => schedule.is_enabled).length} enabled</span>
+            <span style={pillStyle}>
+              {schedules.filter((schedule) => schedule.is_enabled).length}{" "}
+              enabled
+            </span>
           </div>
 
           <div style={listStyle}>
             {schedules.length === 0 ? (
-              <p style={bodyStyle}>No recurring schedules have been configured yet.</p>
+              <p style={bodyStyle}>
+                No recurring schedules yet. Save one above to keep a proven
+                workflow running automatically and make reviews more repeatable.
+              </p>
             ) : (
               schedules.map((schedule) => (
                 <article key={schedule.id} style={cardStyle}>
                   <div style={cardHeaderStyle}>
                     <div>
-                      <p style={sectionLabelStyle}>{schedule.strategy_template.workflow_kind}</p>
+                      <p style={sectionLabelStyle}>
+                        {humanizeLabel(
+                          schedule.strategy_template.workflow_kind,
+                        )}
+                      </p>
                       <h3 style={cardTitleStyle}>{schedule.name}</h3>
                       <p style={metaStyle}>
-                        Template: {schedule.strategy_template.name} - TZ {schedule.timezone}
+                        Template: {schedule.strategy_template.name} - Time zone{" "}
+                        {schedule.timezone}
                       </p>
                     </div>
-                    <div style={{ display: "grid", gap: "0.45rem", justifyItems: "end" }}>
-                      <span style={stateBadgeStyle(schedule.is_enabled ? "enabled" : "paused")}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: "0.45rem",
+                        justifyItems: "end",
+                      }}
+                    >
+                      <span
+                        style={stateBadgeStyle(
+                          schedule.is_enabled ? "enabled" : "paused",
+                        )}
+                      >
                         {schedule.is_enabled ? "enabled" : "paused"}
                       </span>
-                      <span style={pillStyle}>{schedule.review_status.replaceAll("_", " ")}</span>
+                      <span style={pillStyle}>
+                        {humanizeLabel(schedule.review_status)}
+                      </span>
                     </div>
                   </div>
 
-                  <p style={bodyStyle}>{schedule.description || "No description provided."}</p>
+                  <p style={bodyStyle}>
+                    {schedule.description ||
+                      "Add a short note so teammates know why this schedule exists."}
+                  </p>
                   <div style={statsGridStyle}>
                     <div style={statCardStyle}>
-                      <strong>Cron</strong>
+                      <strong>Cadence</strong>
                       <div style={metaStyle}>
-                        {schedule.cron_minute} {schedule.cron_hour} {schedule.cron_day_of_month}{" "}
-                        {schedule.cron_month_of_year} {schedule.cron_day_of_week}
+                        {schedule.cron_minute} {schedule.cron_hour}{" "}
+                        {schedule.cron_day_of_month}{" "}
+                        {schedule.cron_month_of_year}{" "}
+                        {schedule.cron_day_of_week}
                       </div>
                     </div>
                     <div style={statCardStyle}>
-                      <strong>Notifications</strong>
+                      <strong>Alerts</strong>
                       <div style={metaStyle}>
                         {schedule.notify_channel === "email"
-                          ? schedule.notify_email || user.email || "fallback account email"
+                          ? schedule.notify_email ||
+                            user.email ||
+                            "fallback account email"
                           : schedule.notify_webhook_url || "workspace defaults"}
                       </div>
                     </div>
                     <div style={statCardStyle}>
-                      <strong>Last launch</strong>
+                      <strong>Last run</strong>
                       <div style={metaStyle}>
-                        {schedule.last_launch_status ?? "Never launched"}
-                        {schedule.last_run_id ? ` - run #${schedule.last_run_id}` : ""}
+                        {schedule.last_launch_status
+                          ? humanizeLabel(schedule.last_launch_status)
+                          : "Never run yet"}
+                        {schedule.last_run_id
+                          ? ` - run #${schedule.last_run_id}`
+                          : ""}
                       </div>
                     </div>
                   </div>
 
-                  {schedule.last_error_message ? <p style={errorStyle}>{schedule.last_error_message}</p> : null}
+                  {schedule.last_error_message ? (
+                    <p style={errorStyle}>{schedule.last_error_message}</p>
+                  ) : null}
 
                   <div style={actionRowStyle}>
                     <button
@@ -567,15 +771,29 @@ export function ScheduleHub() {
                       onClick={() => void handleTrigger(schedule)}
                       disabled={activeScheduleId === schedule.id}
                     >
-                      {activeScheduleId === schedule.id ? "Launching..." : "Run now"}
+                      {activeScheduleId === schedule.id
+                        ? "Launching..."
+                        : "Launch now"}
                     </button>
-                    <button type="button" style={ghostButtonStyle} onClick={() => void handleToggle(schedule)}>
+                    <button
+                      type="button"
+                      style={ghostButtonStyle}
+                      onClick={() => void handleToggle(schedule)}
+                    >
                       {schedule.is_enabled ? "Pause" : "Enable"}
                     </button>
-                    <button type="button" style={ghostButtonStyle} onClick={() => void handleQuickEdit(schedule)}>
-                      Quick edit
+                    <button
+                      type="button"
+                      style={ghostButtonStyle}
+                      onClick={() => void handleQuickEdit(schedule)}
+                    >
+                      Edit cadence
                     </button>
-                    <button type="button" style={dangerButtonStyle} onClick={() => void handleDelete(schedule)}>
+                    <button
+                      type="button"
+                      style={dangerButtonStyle}
+                      onClick={() => void handleDelete(schedule)}
+                    >
                       Delete
                     </button>
                   </div>
@@ -591,9 +809,15 @@ export function ScheduleHub() {
 
 function formatApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    return error.errors.length > 0 ? `${error.message} ${error.errors.join(" ")}` : error.message;
+    return error.errors.length > 0
+      ? `${error.message} ${error.errors.join(" ")}`
+      : error.message;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function humanizeLabel(value: string): string {
+  return value.replaceAll("_", " ");
 }
 
 const pageStyle: CSSProperties = {
@@ -795,6 +1019,24 @@ const noteStyle: CSSProperties = {
 const errorStyle: CSSProperties = {
   color: "#a33225",
   fontWeight: 600,
+};
+
+const infoStyle: CSSProperties = {
+  marginTop: "1rem",
+  padding: "0.9rem 1rem",
+  borderRadius: "16px",
+  background: "#e6f1ff",
+  color: "#0f4c81",
+};
+
+const emptyStateStyle: CSSProperties = {
+  display: "grid",
+  gap: "1rem",
+  marginTop: "1.25rem",
+  padding: "1rem",
+  borderRadius: "18px",
+  background: "#ffffff",
+  border: "1px solid rgba(73, 98, 128, 0.16)",
 };
 
 function stateBadgeStyle(label: string): CSSProperties {

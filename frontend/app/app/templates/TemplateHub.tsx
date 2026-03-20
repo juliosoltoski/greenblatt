@@ -28,6 +28,7 @@ export function TemplateHub() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [isLaunchingId, setIsLaunchingId] = useState<number | null>(null);
+  const hasActiveFilters = workflowFilter !== "all" || starredOnly;
 
   useEffect(() => {
     const preference = readViewPreference<{ workflowFilter: WorkflowFilter; starredOnly: boolean }>("template-hub", {
@@ -168,7 +169,7 @@ export function TemplateHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Templates</p>
-          <h1 style={titleStyle}>Loading saved strategy templates</h1>
+          <h1 style={titleStyle}>Loading reusable workflows</h1>
         </section>
       </main>
     );
@@ -180,9 +181,9 @@ export function TemplateHub() {
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Templates</p>
           <h1 style={titleStyle}>Templates unavailable</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load saved templates."}</p>
+          <p style={bodyStyle}>{error ?? "Unable to open your template library."}</p>
           <Link href="/app" style={primaryLinkStyle}>
-            Back to app
+            Back to dashboard
           </Link>
         </section>
       </main>
@@ -195,21 +196,21 @@ export function TemplateHub() {
         <div style={headerRowStyle}>
           <div>
             <p style={eyebrowStyle}>Templates</p>
-            <h1 style={titleStyle}>Reusable research setups</h1>
+            <h1 style={titleStyle}>Turn strong runs into reusable workflows</h1>
           </div>
           <div style={actionRowStyle}>
+            <Link href="/app/history" style={ghostLinkStyle}>
+              Open history
+            </Link>
             <Link href="/app" style={ghostLinkStyle}>
               Dashboard
-            </Link>
-            <Link href="/app/history" style={ghostLinkStyle}>
-              History
             </Link>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Save strong screens and backtests as templates, bookmark the important ones, and keep a
-          few notes so future reruns do not start from zero context.
+          Save the screens and backtests worth repeating so a strong idea becomes a reusable
+          workflow instead of a one-off result.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -232,17 +233,39 @@ export function TemplateHub() {
             <span>Starred templates only</span>
           </label>
           <div style={noteStyle}>
-            Create new templates from history or directly from run detail pages.
+            Save templates from history or any run detail page once the setup is worth repeating.
           </div>
         </div>
 
         <div style={listStyle}>
           {templates.length === 0 ? (
             <section style={cardStyle}>
-              <p style={bodyStyle}>No templates match the current view.</p>
-              <Link href="/app/history" style={primaryLinkStyle}>
-                Open history
-              </Link>
+              <p style={sectionLabelStyle}>No templates yet</p>
+              <h2 style={cardTitleStyle}>
+                {hasActiveFilters ? "No templates match this view" : "Your reusable workflow library is still empty"}
+              </h2>
+              <p style={bodyStyle}>
+                {hasActiveFilters
+                  ? "Clear the filters or save a screen or backtest from history to bring matching templates into view."
+                  : "Save a strong screen or backtest when you want to rerun the same setup without rebuilding it from scratch."}
+              </p>
+              <div style={actionRowStyle}>
+                <Link href="/app/history" style={primaryLinkStyle}>
+                  Open history
+                </Link>
+                {hasActiveFilters ? (
+                  <button
+                    type="button"
+                    style={ghostButtonStyle}
+                    onClick={() => {
+                      setWorkflowFilter("all");
+                      setStarredOnly(false);
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                ) : null}
+              </div>
             </section>
           ) : (
             templates.map((template) => (
@@ -250,9 +273,9 @@ export function TemplateHub() {
                 <div style={cardHeaderStyle}>
                   <div>
                     <div style={titleRowStyle}>
-                      <p style={sectionLabelStyle}>{template.workflow_kind}</p>
+                      <p style={sectionLabelStyle}>{humanizeLabel(template.workflow_kind)} template</p>
                       {template.is_starred ? <span style={starPillStyle}>Starred</span> : null}
-                      <span style={pillStyle}>{template.review_status.replaceAll("_", " ")}</span>
+                      <span style={pillStyle}>{humanizeLabel(template.review_status)}</span>
                     </div>
                     <h2 style={cardTitleStyle}>
                       <Link href={`/app/templates/${template.id}`} style={titleLinkStyle}>
@@ -263,7 +286,9 @@ export function TemplateHub() {
                   </div>
                   <span style={pillStyle}>{template.last_used_at ? "Used" : "New"}</span>
                 </div>
-                <p style={bodyStyle}>{template.description || "No description provided."}</p>
+                <p style={bodyStyle}>
+                  {template.description || "Add a short note so future reruns start with context."}
+                </p>
                 {template.tags.length > 0 ? (
                   <div style={tagRowStyle}>
                     {template.tags.map((tag) => (
@@ -274,14 +299,7 @@ export function TemplateHub() {
                   </div>
                 ) : null}
                 {template.notes ? <p style={noteBlockStyle}>{template.notes}</p> : null}
-                <p style={metaStyle}>
-                  Source:{" "}
-                  {template.source_screen_run_id
-                    ? `screen #${template.source_screen_run_id}`
-                    : template.source_backtest_run_id
-                      ? `backtest #${template.source_backtest_run_id}`
-                      : "manual"}
-                </p>
+                <p style={metaStyle}>Created from {templateSourceLabel(template)}</p>
                 <div style={actionRowStyle}>
                   <Link href={`/app/templates/${template.id}`} style={ghostLinkStyle}>
                     Open
@@ -294,7 +312,7 @@ export function TemplateHub() {
                     }
                     style={ghostLinkStyle}
                   >
-                    Use as draft
+                    Open draft
                   </Link>
                   <button
                     type="button"
@@ -302,7 +320,7 @@ export function TemplateHub() {
                     onClick={() => void handleLaunch(template)}
                     disabled={isLaunchingId === template.id}
                   >
-                    {isLaunchingId === template.id ? "Launching..." : "Launch now"}
+                    {isLaunchingId === template.id ? "Launching..." : "Run now"}
                   </button>
                   <button type="button" style={ghostButtonStyle} onClick={() => void handleToggleStar(template)}>
                     {template.is_starred ? "Unstar" : "Star"}
@@ -328,6 +346,24 @@ function splitTags(value: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function humanizeLabel(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function templateSourceLabel(template: StrategyTemplate): string {
+  if (template.source_screen_run_id) {
+    return `screen #${template.source_screen_run_id}`;
+  }
+  if (template.source_backtest_run_id) {
+    return `backtest #${template.source_backtest_run_id}`;
+  }
+  return "a manually saved setup";
 }
 
 function formatApiError(error: unknown, fallback: string): string {

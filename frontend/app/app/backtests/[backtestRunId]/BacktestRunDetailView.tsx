@@ -416,7 +416,7 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
 
         <section style={sectionCardStyle}>
           <p style={sectionLabelStyle}>Job timeline</p>
-          <JobTimeline events={events} emptyMessage="Timeline events appear after the worker starts the run." />
+          <JobTimeline events={events} emptyMessage="Activity appears after the run starts." />
         </section>
 
         <div style={summaryGridStyle}>
@@ -430,7 +430,15 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
           />
           <SummaryCard label="Trades" value={String(backtestRun.trade_count)} detail={`${backtestRun.review_target_count} review targets`} />
           <SummaryCard label="Export" value={backtestRun.export?.filename ?? "Pending"} detail={backtestRun.export ? "Artifact ready" : "Available when complete"} />
-          <SummaryCard label="Research status" value={backtestRun.is_starred ? "Starred" : "Standard"} detail={backtestRun.tags.length > 0 ? backtestRun.tags.join(", ") : "No tags yet"} />
+          <SummaryCard
+            label="Research status"
+            value={backtestRun.is_starred ? "Starred" : "Standard"}
+            detail={
+              backtestRun.tags.length > 0
+                ? backtestRun.tags.join(", ")
+                : "Add tags to group this backtest with related research."
+            }
+          />
         </div>
 
         {dataQuality.warningCount > 0 ? (
@@ -490,12 +498,20 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
               </div>
             </div>
             <div style={artifactListStyle}>
-              {backtestRun.artifacts.map((artifact) => (
-                <a key={artifact.download_url} href={artifact.download_url} style={artifactLinkStyle}>
-                  <strong>{artifact.label}</strong>
-                  <span style={metaStyle}>{artifact.filename}</span>
-                </a>
-              ))}
+              {backtestRun.artifacts.length === 0 ? (
+                <p style={bodyStyle}>
+                  {backtestRun.job.is_terminal
+                    ? "This run finished without saved exports."
+                    : "Exports will appear when the run completes."}
+                </p>
+              ) : (
+                backtestRun.artifacts.map((artifact) => (
+                  <a key={artifact.download_url} href={artifact.download_url} style={artifactLinkStyle}>
+                    <strong>{artifact.label}</strong>
+                    <span style={metaStyle}>{artifact.filename}</span>
+                  </a>
+                ))
+              )}
             </div>
           </section>
         </div>
@@ -513,7 +529,9 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
           </div>
           {chartData == null ? (
             <p style={bodyStyle}>
-              {backtestRun.job.is_terminal ? "No equity points were persisted." : "Equity curve will appear once the run finishes."}
+              {backtestRun.job.is_terminal
+                ? "This run finished without an equity curve."
+                : "Equity curve will appear when the run completes."}
             </p>
           ) : (
             <div style={{ display: "grid", gap: "0.85rem" }}>
@@ -592,7 +610,11 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
                 ...(showTradeReason ? [trade.reason] : []),
               ])}
               tickerColumnIndex={1}
-              emptyMessage={backtestRun.job.is_terminal ? "No trades were persisted." : "Trades will appear once the run finishes."}
+              emptyMessage={
+                backtestRun.job.is_terminal
+                  ? "This run finished without saved trades."
+                  : "Trades will appear when the run completes."
+              }
             />
             <div style={paginationStyle}>
               <button type="button" style={ghostButtonStyle} onClick={() => setTradePage((value) => Math.max(1, value - 1))} disabled={tradePage <= 1}>
@@ -656,7 +678,11 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
                 target.composite_score == null ? "-" : String(target.composite_score),
               ])}
               tickerColumnIndex={2}
-              emptyMessage={backtestRun.job.is_terminal ? "No review targets were persisted." : "Review targets will appear once the run finishes."}
+              emptyMessage={
+                backtestRun.job.is_terminal
+                  ? "No review targets were saved for this run."
+                  : "Review targets will appear when the run completes."
+              }
             />
             <div style={paginationStyle}>
               <button type="button" style={ghostButtonStyle} onClick={() => setReviewTargetPage((value) => Math.max(1, value - 1))} disabled={reviewTargetPage <= 1}>
@@ -706,7 +732,11 @@ export function BacktestRunDetailView({ backtestRunId }: BacktestRunDetailViewPr
               holding.score == null ? "-" : String(holding.score),
             ])}
             tickerColumnIndex={0}
-            emptyMessage={backtestRun.job.is_terminal ? "No final holdings were persisted." : "Final holdings will appear once the run finishes."}
+            emptyMessage={
+              backtestRun.job.is_terminal
+                ? "This run finished without final holdings."
+                : "Final holdings will appear when the run completes."
+            }
           />
         </section>
 

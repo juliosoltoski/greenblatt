@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -26,6 +32,7 @@ export function CollaborationHub() {
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPinned, setIsPinned] = useState(true);
@@ -60,7 +67,11 @@ export function CollaborationHub() {
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load collaboration tools.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load collaboration tools.",
+        );
         setState("error");
       }
     }
@@ -89,6 +100,7 @@ export function CollaborationHub() {
     }
     setIsCreating(true);
     setError(null);
+    setNotice(null);
     try {
       await createCollection({
         workspaceId: user.active_workspace?.id,
@@ -100,8 +112,11 @@ export function CollaborationHub() {
       setDescription("");
       setIsPinned(true);
       await refresh(user);
+      setNotice("Collection saved.");
     } catch (createError) {
-      setError(formatApiError(createError, "Unable to create that collection."));
+      setError(
+        formatApiError(createError, "Unable to create that collection."),
+      );
     } finally {
       setIsCreating(false);
     }
@@ -113,27 +128,44 @@ export function CollaborationHub() {
     }
     setBusyId(collection.id);
     setError(null);
+    setNotice(null);
     try {
-      await updateCollection(collection.id, { isPinned: !collection.is_pinned });
+      await updateCollection(collection.id, {
+        isPinned: !collection.is_pinned,
+      });
       await refresh(user);
+      setNotice(
+        collection.is_pinned
+          ? "Collection unpinned."
+          : "Collection pinned to top.",
+      );
     } catch (updateError) {
-      setError(formatApiError(updateError, "Unable to update this collection."));
+      setError(
+        formatApiError(updateError, "Unable to update this collection."),
+      );
     } finally {
       setBusyId(null);
     }
   }
 
   async function handleDelete(collection: WorkspaceCollection) {
-    if (user == null || !window.confirm(`Delete collection "${collection.name}"?`)) {
+    if (
+      user == null ||
+      !window.confirm(`Delete collection "${collection.name}"?`)
+    ) {
       return;
     }
     setBusyId(collection.id);
     setError(null);
+    setNotice(null);
     try {
       await deleteCollection(collection.id);
       await refresh(user);
+      setNotice("Collection deleted.");
     } catch (deleteError) {
-      setError(formatApiError(deleteError, "Unable to delete this collection."));
+      setError(
+        formatApiError(deleteError, "Unable to delete this collection."),
+      );
     } finally {
       setBusyId(null);
     }
@@ -144,7 +176,7 @@ export function CollaborationHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Collaboration</p>
-          <h1 style={titleStyle}>Loading workspace activity</h1>
+          <h1 style={titleStyle}>Loading shared research activity</h1>
         </section>
       </main>
     );
@@ -156,7 +188,12 @@ export function CollaborationHub() {
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Collaboration</p>
           <h1 style={titleStyle}>Collaboration unavailable</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load workspace collaboration tools."}</p>
+          <p style={bodyStyle}>
+            {error ?? "Unable to open your collaboration workspace."}
+          </p>
+          <Link href="/app" style={ghostLinkStyle}>
+            Back to dashboard
+          </Link>
         </section>
       </main>
     );
@@ -168,42 +205,53 @@ export function CollaborationHub() {
         <div style={headerRowStyle}>
           <div>
             <p style={eyebrowStyle}>Collaboration</p>
-            <h1 style={titleStyle}>Workspace activity and curated collections</h1>
+            <h1 style={titleStyle}>Keep shared research organized</h1>
           </div>
           <div style={actionRowStyle}>
             <Link href="/app/templates" style={ghostLinkStyle}>
-              Templates
+              Open templates
             </Link>
             <Link href="/app/history" style={ghostLinkStyle}>
-              History
+              Open history
             </Link>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Keep a lightweight audit trail of what changed in the workspace and group related runs or
-          templates into curated collections so the main app stays easier to scan.
+          Collections keep high-conviction work easy to find, while recent
+          activity shows what moved across the workspace. Use both to keep
+          shared research reviewable instead of scattered.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
+        {notice ? <p style={infoStyle}>{notice}</p> : null}
 
         <div style={layoutStyle}>
           <section style={cardStyle}>
-            <h2 style={cardTitleStyle}>Create collection</h2>
+            <h2 style={cardTitleStyle}>Save collection</h2>
             <form style={formStyle} onSubmit={handleCreateCollection}>
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Collection name" style={inputStyle} />
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Collection name"
+                style={inputStyle}
+              />
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="What belongs in this collection?"
+                placeholder="What belongs in this collection and why?"
                 style={textareaStyle}
               />
               <label style={checkboxStyle}>
-                <input type="checkbox" checked={isPinned} onChange={(event) => setIsPinned(event.target.checked)} />
-                <span>Pin this collection to the top</span>
+                <input
+                  type="checkbox"
+                  checked={isPinned}
+                  onChange={(event) => setIsPinned(event.target.checked)}
+                />
+                <span>Pin collection to top</span>
               </label>
               <button type="submit" style={buttonStyle} disabled={isCreating}>
-                {isCreating ? "Creating..." : "Create collection"}
+                {isCreating ? "Saving..." : "Save collection"}
               </button>
             </form>
           </section>
@@ -211,30 +259,52 @@ export function CollaborationHub() {
           <section style={cardStyle}>
             <h2 style={cardTitleStyle}>Collections</h2>
             <div style={listStyle}>
-              {collections.length === 0 ? <p style={bodyStyle}>No collections yet.</p> : null}
+              {collections.length === 0 ? (
+                <p style={bodyStyle}>
+                  No collections yet. Save one to group related runs and
+                  templates for faster review.
+                </p>
+              ) : null}
               {collections.map((collection) => (
                 <article key={collection.id} style={itemCardStyle}>
                   <div style={itemHeaderStyle}>
                     <div>
                       <strong>{collection.name}</strong>
                       <p style={metaStyle}>
-                        {collection.items.length} item{collection.items.length === 1 ? "" : "s"}
+                        {collection.items.length} item
+                        {collection.items.length === 1 ? "" : "s"}
                         {collection.is_pinned ? " · pinned" : ""}
                       </p>
                     </div>
                     <div style={actionRowStyle}>
-                      <button type="button" style={linkButtonStyle} onClick={() => void handleTogglePin(collection)} disabled={busyId === collection.id}>
-                        {collection.is_pinned ? "Unpin" : "Pin"}
+                      <button
+                        type="button"
+                        style={linkButtonStyle}
+                        onClick={() => void handleTogglePin(collection)}
+                        disabled={busyId === collection.id}
+                      >
+                        {collection.is_pinned ? "Unpin" : "Pin to top"}
                       </button>
-                      <button type="button" style={linkButtonStyle} onClick={() => void handleDelete(collection)} disabled={busyId === collection.id}>
+                      <button
+                        type="button"
+                        style={linkButtonStyle}
+                        onClick={() => void handleDelete(collection)}
+                        disabled={busyId === collection.id}
+                      >
                         Delete
                       </button>
                     </div>
                   </div>
-                  {collection.description ? <p style={bodyStyle}>{collection.description}</p> : null}
+                  {collection.description ? (
+                    <p style={bodyStyle}>{collection.description}</p>
+                  ) : null}
                   <div style={chipRowStyle}>
                     {collection.items.slice(0, 4).map((item) => (
-                      <Link key={item.id} href={item.resource.href} style={chipStyle}>
+                      <Link
+                        key={item.id}
+                        href={item.resource.href}
+                        style={chipStyle}
+                      >
                         {item.resource.title}
                       </Link>
                     ))}
@@ -248,15 +318,23 @@ export function CollaborationHub() {
         <section style={cardStyle}>
           <h2 style={cardTitleStyle}>Recent activity</h2>
           <div style={listStyle}>
-            {activity.length === 0 ? <p style={bodyStyle}>No recent activity yet.</p> : null}
+            {activity.length === 0 ? (
+              <p style={bodyStyle}>
+                No shared activity yet. New runs, template saves, and collection
+                updates will show up here.
+              </p>
+            ) : null}
             {activity.map((event) => (
               <article key={event.id} style={itemCardStyle}>
                 <div style={itemHeaderStyle}>
                   <strong>{event.summary}</strong>
-                  <span style={metaStyle}>{formatTimestamp(event.created_at)}</span>
+                  <span style={metaStyle}>
+                    {formatTimestamp(event.created_at)}
+                  </span>
                 </div>
                 <p style={metaStyle}>
-                  {event.actor_display_name ?? "Unknown user"} · {event.verb.replaceAll("_", " ")}
+                  {event.actor_display_name ?? "Unknown user"} ·{" "}
+                  {humanizeLabel(event.verb)}
                 </p>
               </article>
             ))}
@@ -273,6 +351,10 @@ function formatTimestamp(value: string): string {
   } catch {
     return value;
   }
+}
+
+function humanizeLabel(value: string): string {
+  return value.replaceAll("_", " ");
 }
 
 function formatApiError(error: unknown, fallback: string): string {
@@ -332,6 +414,14 @@ const errorStyle: CSSProperties = {
   borderRadius: "16px",
   background: "#fff2f2",
   color: "#a12f2f",
+};
+
+const infoStyle: CSSProperties = {
+  margin: 0,
+  padding: "0.75rem 0.95rem",
+  borderRadius: "16px",
+  background: "#e6f1ff",
+  color: "#0f4c81",
 };
 
 const layoutStyle: CSSProperties = {

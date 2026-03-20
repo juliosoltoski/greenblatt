@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -21,7 +27,6 @@ import { readViewPreference, writeViewPreference } from "@/lib/viewPreferences";
 
 type LoadState = "loading" | "ready" | "error";
 
-
 export function HistoryHub() {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
@@ -39,7 +44,10 @@ export function HistoryHub() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const preference = readViewPreference<{ jobState: JobRunState | ""; starredOnly: boolean }>("history-hub", {
+    const preference = readViewPreference<{
+      jobState: JobRunState | "";
+      starredOnly: boolean;
+    }>("history-hub", {
       jobState: "",
       starredOnly: false,
     });
@@ -59,8 +67,18 @@ export function HistoryHub() {
         const currentUser = await getCurrentUser();
         const workspaceId = currentUser.active_workspace?.id;
         const [screenPayload, backtestPayload] = await Promise.all([
-          listScreens(workspaceId, { page: screenPage, pageSize: 10, jobState, starredOnly }),
-          listBacktests(workspaceId, { page: backtestPage, pageSize: 10, jobState, starredOnly }),
+          listScreens(workspaceId, {
+            page: screenPage,
+            pageSize: 10,
+            jobState,
+            starredOnly,
+          }),
+          listBacktests(workspaceId, {
+            page: backtestPage,
+            pageSize: 10,
+            jobState,
+            starredOnly,
+          }),
         ]);
         if (!active) {
           return;
@@ -81,7 +99,11 @@ export function HistoryHub() {
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load run history.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load run history.",
+        );
         setState("error");
       }
     }
@@ -107,9 +129,16 @@ export function HistoryHub() {
     }
     return `/app/history/compare?kind=backtest&left=${selectedBacktestIds[0]}&right=${selectedBacktestIds[1]}`;
   }, [selectedBacktestIds]);
+  const hasActiveFilters = jobState !== "" || starredOnly;
 
-  async function handleSaveTemplate(kind: "screen" | "backtest", runId: number) {
-    const defaultName = kind === "screen" ? `Screen run ${runId}` : `Backtest run ${runId}`;
+  async function handleSaveTemplate(
+    kind: "screen" | "backtest",
+    runId: number,
+  ) {
+    const defaultName =
+      kind === "screen"
+        ? `Screen template from run #${runId}`
+        : `Backtest template from run #${runId}`;
     const name = window.prompt("Template name", defaultName);
     if (name == null || name.trim() === "") {
       return;
@@ -124,11 +153,16 @@ export function HistoryHub() {
         router.push("/app/templates");
       });
     } catch (templateError) {
-      setError(formatApiError(templateError, "Unable to save this run as a template."));
+      setError(
+        formatApiError(templateError, "Unable to save this run as a template."),
+      );
     }
   }
 
-  async function handleToggleStar(kind: "screen" | "backtest", run: ScreenRun | BacktestRun) {
+  async function handleToggleStar(
+    kind: "screen" | "backtest",
+    run: ScreenRun | BacktestRun,
+  ) {
     try {
       if (kind === "screen") {
         await updateScreenRun(run.id, { isStarred: !run.is_starred });
@@ -138,8 +172,18 @@ export function HistoryHub() {
       const workspaceId = user?.active_workspace?.id;
       if (workspaceId) {
         const [screenPayload, backtestPayload] = await Promise.all([
-          listScreens(workspaceId, { page: screenPage, pageSize: 10, jobState, starredOnly }),
-          listBacktests(workspaceId, { page: backtestPage, pageSize: 10, jobState, starredOnly }),
+          listScreens(workspaceId, {
+            page: screenPage,
+            pageSize: 10,
+            jobState,
+            starredOnly,
+          }),
+          listBacktests(workspaceId, {
+            page: backtestPage,
+            pageSize: 10,
+            jobState,
+            starredOnly,
+          }),
         ]);
         setScreens(screenPayload.results);
         setScreenCount(screenPayload.count);
@@ -147,7 +191,9 @@ export function HistoryHub() {
         setBacktestCount(backtestPayload.count);
       }
     } catch (updateError) {
-      setError(formatApiError(updateError, "Unable to update the run bookmark."));
+      setError(
+        formatApiError(updateError, "Unable to update the run bookmark."),
+      );
     }
   }
 
@@ -163,7 +209,7 @@ export function HistoryHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>History</p>
-          <h1 style={titleStyle}>Loading prior screen and backtest runs</h1>
+          <h1 style={titleStyle}>Loading your research history</h1>
         </section>
       </main>
     );
@@ -174,10 +220,10 @@ export function HistoryHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>History</p>
-          <h1 style={titleStyle}>Run history unavailable</h1>
+          <h1 style={titleStyle}>History unavailable</h1>
           <p style={bodyStyle}>{error ?? "Unable to load run history."}</p>
           <Link href="/app" style={primaryLinkStyle}>
-            Back to app
+            Back to dashboard
           </Link>
         </section>
       </main>
@@ -189,30 +235,38 @@ export function HistoryHub() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M7 History</p>
-            <h1 style={titleStyle}>Discover, compare, and reuse prior runs</h1>
+            <p style={eyebrowStyle}>History</p>
+            <h1 style={titleStyle}>Reuse, compare, and promote past work</h1>
           </div>
           <div style={actionRowStyle}>
-            <Link href="/app" style={ghostLinkStyle}>
-              App shell
-            </Link>
             <Link href="/app/templates" style={ghostLinkStyle}>
-              Templates
+              Open templates
+            </Link>
+            <Link href="/app" style={ghostLinkStyle}>
+              Dashboard
             </Link>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Save
-          useful runs as templates, open them as drafts, or compare two runs side by side.
+          Active workspace:{" "}
+          <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>.
+          Review what worked, compare two runs side by side, and turn the
+          strongest ideas into reusable templates or fresh drafts.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
 
         <div style={toolbarStyle}>
           <label style={fieldStyle}>
-            <span style={labelStyle}>Job state filter</span>
-            <select value={jobState} onChange={(event) => setJobState(event.target.value as JobRunState | "")} style={inputStyle}>
+            <span style={labelStyle}>Run status</span>
+            <select
+              value={jobState}
+              onChange={(event) =>
+                setJobState(event.target.value as JobRunState | "")
+              }
+              style={inputStyle}
+            >
               <option value="">All states</option>
               <option value="queued">Queued</option>
               <option value="running">Running</option>
@@ -223,7 +277,11 @@ export function HistoryHub() {
             </select>
           </label>
           <label style={checkboxFieldStyle}>
-            <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={starredOnly}
+              onChange={(event) => setStarredOnly(event.target.checked)}
+            />
             <span>Starred runs only</span>
           </label>
         </div>
@@ -233,19 +291,25 @@ export function HistoryHub() {
             <div style={cardHeaderStyle}>
               <div>
                 <p style={sectionLabelStyle}>Screens</p>
-                <h2 style={cardTitleStyle}>{screenCount.toLocaleString()} runs</h2>
+                <h2 style={cardTitleStyle}>
+                  {screenCount.toLocaleString()} runs
+                </h2>
               </div>
               {screenCompareHref ? (
                 <Link href={screenCompareHref} style={primaryLinkStyle}>
                   Compare selected
                 </Link>
               ) : (
-                <span style={pillStyle}>Select 2 runs to compare</span>
+                <span style={pillStyle}>Pick 2 runs to compare</span>
               )}
             </div>
             <div style={rowListStyle}>
               {screens.length === 0 ? (
-                <p style={bodyStyle}>No screen runs match the current filter.</p>
+                <p style={bodyStyle}>
+                  {hasActiveFilters
+                    ? "No screen runs match this filter yet. Clear the filter or star more runs to widen the view."
+                    : "No screen history yet. Run a screen, then come back here to compare results and save the strongest ideas as templates."}
+                </p>
               ) : (
                 screens.map((screen) => (
                   <article key={screen.id} style={rowCardStyle}>
@@ -253,7 +317,11 @@ export function HistoryHub() {
                       <input
                         type="checkbox"
                         checked={selectedScreenIds.includes(screen.id)}
-                        onChange={() => setSelectedScreenIds((current) => toggleSelection(current, screen.id))}
+                        onChange={() =>
+                          setSelectedScreenIds((current) =>
+                            toggleSelection(current, screen.id),
+                          )
+                        }
                       />
                       <span>Compare</span>
                     </label>
@@ -261,26 +329,57 @@ export function HistoryHub() {
                       <div>
                         <strong>Screen #{screen.id}</strong>
                         <div style={metaStyle}>{screen.universe.name}</div>
-                        <div style={subtleMetaStyle}>{screen.created_at}</div>
-                        {screen.tags.length > 0 ? <div style={tagRowStyle}>{screen.tags.map((tag) => <span key={tag} style={tagStyle}>{tag}</span>)}</div> : null}
+                        <div style={subtleMetaStyle}>
+                          {formatTimestamp(screen.created_at)}
+                        </div>
+                        {screen.tags.length > 0 ? (
+                          <div style={tagRowStyle}>
+                            {screen.tags.map((tag) => (
+                              <span key={tag} style={tagStyle}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                      <span style={stateBadgeStyle(screen.job.state)}>{screen.job.state.replaceAll("_", " ")}</span>
+                      <span style={stateBadgeStyle(screen.job.state)}>
+                        {humanizeLabel(screen.job.state)}
+                      </span>
                     </div>
                     <div style={actionRowStyle}>
-                      <button type="button" style={ghostButtonStyle} onClick={() => void handleToggleStar("screen", screen)}>
+                      <button
+                        type="button"
+                        style={ghostButtonStyle}
+                        onClick={() => void handleToggleStar("screen", screen)}
+                      >
                         {screen.is_starred ? "Unstar" : "Star"}
                       </button>
-                      <Link href={`/app/screens/${screen.id}`} style={ghostLinkStyle}>
+                      <Link
+                        href={`/app/screens/${screen.id}`}
+                        style={ghostLinkStyle}
+                      >
                         Open
                       </Link>
-                      <Link href={`/app/screens?draft_screen_run_id=${screen.id}`} style={ghostLinkStyle}>
-                        Duplicate as draft
+                      <Link
+                        href={`/app/screens?draft_screen_run_id=${screen.id}`}
+                        style={ghostLinkStyle}
+                      >
+                        Open draft
                       </Link>
-                      <button type="button" style={ghostButtonStyle} onClick={() => void handleSaveTemplate("screen", screen.id)}>
-                        Save as template
+                      <button
+                        type="button"
+                        style={ghostButtonStyle}
+                        onClick={() =>
+                          void handleSaveTemplate("screen", screen.id)
+                        }
+                      >
+                        Save template
                       </button>
                       {screen.artifacts[0] ? (
-                        <a href={screen.artifacts[0].download_url} style={ghostLinkStyle}>
+                        <a
+                          href={screen.artifacts[0].download_url}
+                          style={ghostLinkStyle}
+                        >
                           Export
                         </a>
                       ) : null}
@@ -290,11 +389,25 @@ export function HistoryHub() {
               )}
             </div>
             <div style={paginationStyle}>
-              <button type="button" style={ghostButtonStyle} onClick={() => setScreenPage((value) => Math.max(1, value - 1))} disabled={screenPage <= 1}>
+              <button
+                type="button"
+                style={ghostButtonStyle}
+                onClick={() => setScreenPage((value) => Math.max(1, value - 1))}
+                disabled={screenPage <= 1}
+              >
                 Previous
               </button>
-              <span style={metaStyle}>Page {screenPage} of {screenPageCount}</span>
-              <button type="button" style={ghostButtonStyle} onClick={() => setScreenPage((value) => Math.min(screenPageCount, value + 1))} disabled={screenPage >= screenPageCount}>
+              <span style={metaStyle}>
+                Page {screenPage} of {screenPageCount}
+              </span>
+              <button
+                type="button"
+                style={ghostButtonStyle}
+                onClick={() =>
+                  setScreenPage((value) => Math.min(screenPageCount, value + 1))
+                }
+                disabled={screenPage >= screenPageCount}
+              >
                 Next
               </button>
             </div>
@@ -304,19 +417,25 @@ export function HistoryHub() {
             <div style={cardHeaderStyle}>
               <div>
                 <p style={sectionLabelStyle}>Backtests</p>
-                <h2 style={cardTitleStyle}>{backtestCount.toLocaleString()} runs</h2>
+                <h2 style={cardTitleStyle}>
+                  {backtestCount.toLocaleString()} runs
+                </h2>
               </div>
               {backtestCompareHref ? (
                 <Link href={backtestCompareHref} style={primaryLinkStyle}>
                   Compare selected
                 </Link>
               ) : (
-                <span style={pillStyle}>Select 2 runs to compare</span>
+                <span style={pillStyle}>Pick 2 runs to compare</span>
               )}
             </div>
             <div style={rowListStyle}>
               {backtests.length === 0 ? (
-                <p style={bodyStyle}>No backtests match the current filter.</p>
+                <p style={bodyStyle}>
+                  {hasActiveFilters
+                    ? "No backtests match this filter yet. Clear the filter or widen the view to bring prior runs back in."
+                    : "No backtest history yet. Start a backtest, then return here to compare ranges, bookmark strong runs, and save templates."}
+                </p>
               ) : (
                 backtests.map((backtest) => (
                   <article key={backtest.id} style={rowCardStyle}>
@@ -324,7 +443,11 @@ export function HistoryHub() {
                       <input
                         type="checkbox"
                         checked={selectedBacktestIds.includes(backtest.id)}
-                        onChange={() => setSelectedBacktestIds((current) => toggleSelection(current, backtest.id))}
+                        onChange={() =>
+                          setSelectedBacktestIds((current) =>
+                            toggleSelection(current, backtest.id),
+                          )
+                        }
                       />
                       <span>Compare</span>
                     </label>
@@ -332,26 +455,59 @@ export function HistoryHub() {
                       <div>
                         <strong>Backtest #{backtest.id}</strong>
                         <div style={metaStyle}>{backtest.universe.name}</div>
-                        <div style={subtleMetaStyle}>{backtest.start_date} to {backtest.end_date}</div>
-                        {backtest.tags.length > 0 ? <div style={tagRowStyle}>{backtest.tags.map((tag) => <span key={tag} style={tagStyle}>{tag}</span>)}</div> : null}
+                        <div style={subtleMetaStyle}>
+                          {backtest.start_date} to {backtest.end_date}
+                        </div>
+                        {backtest.tags.length > 0 ? (
+                          <div style={tagRowStyle}>
+                            {backtest.tags.map((tag) => (
+                              <span key={tag} style={tagStyle}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                      <span style={stateBadgeStyle(backtest.job.state)}>{backtest.job.state.replaceAll("_", " ")}</span>
+                      <span style={stateBadgeStyle(backtest.job.state)}>
+                        {humanizeLabel(backtest.job.state)}
+                      </span>
                     </div>
                     <div style={actionRowStyle}>
-                      <button type="button" style={ghostButtonStyle} onClick={() => void handleToggleStar("backtest", backtest)}>
+                      <button
+                        type="button"
+                        style={ghostButtonStyle}
+                        onClick={() =>
+                          void handleToggleStar("backtest", backtest)
+                        }
+                      >
                         {backtest.is_starred ? "Unstar" : "Star"}
                       </button>
-                      <Link href={`/app/backtests/${backtest.id}`} style={ghostLinkStyle}>
+                      <Link
+                        href={`/app/backtests/${backtest.id}`}
+                        style={ghostLinkStyle}
+                      >
                         Open
                       </Link>
-                      <Link href={`/app/backtests?draft_backtest_run_id=${backtest.id}`} style={ghostLinkStyle}>
-                        Duplicate as draft
+                      <Link
+                        href={`/app/backtests?draft_backtest_run_id=${backtest.id}`}
+                        style={ghostLinkStyle}
+                      >
+                        Open draft
                       </Link>
-                      <button type="button" style={ghostButtonStyle} onClick={() => void handleSaveTemplate("backtest", backtest.id)}>
-                        Save as template
+                      <button
+                        type="button"
+                        style={ghostButtonStyle}
+                        onClick={() =>
+                          void handleSaveTemplate("backtest", backtest.id)
+                        }
+                      >
+                        Save template
                       </button>
                       {backtest.artifacts[0] ? (
-                        <a href={backtest.artifacts[0].download_url} style={ghostLinkStyle}>
+                        <a
+                          href={backtest.artifacts[0].download_url}
+                          style={ghostLinkStyle}
+                        >
                           Export
                         </a>
                       ) : null}
@@ -361,11 +517,29 @@ export function HistoryHub() {
               )}
             </div>
             <div style={paginationStyle}>
-              <button type="button" style={ghostButtonStyle} onClick={() => setBacktestPage((value) => Math.max(1, value - 1))} disabled={backtestPage <= 1}>
+              <button
+                type="button"
+                style={ghostButtonStyle}
+                onClick={() =>
+                  setBacktestPage((value) => Math.max(1, value - 1))
+                }
+                disabled={backtestPage <= 1}
+              >
                 Previous
               </button>
-              <span style={metaStyle}>Page {backtestPage} of {backtestPageCount}</span>
-              <button type="button" style={ghostButtonStyle} onClick={() => setBacktestPage((value) => Math.min(backtestPageCount, value + 1))} disabled={backtestPage >= backtestPageCount}>
+              <span style={metaStyle}>
+                Page {backtestPage} of {backtestPageCount}
+              </span>
+              <button
+                type="button"
+                style={ghostButtonStyle}
+                onClick={() =>
+                  setBacktestPage((value) =>
+                    Math.min(backtestPageCount, value + 1),
+                  )
+                }
+                disabled={backtestPage >= backtestPageCount}
+              >
                 Next
               </button>
             </div>
@@ -378,9 +552,20 @@ export function HistoryHub() {
 
 function formatApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    return error.errors.length > 0 ? `${error.message} ${error.errors.join(" ")}` : error.message;
+    return error.errors.length > 0
+      ? `${error.message} ${error.errors.join(" ")}`
+      : error.message;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function humanizeLabel(value: string): string {
+  return value.replaceAll("_", " ");
+}
+
+function formatTimestamp(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
 function stateBadgeStyle(state: ScreenRun["job"]["state"]): CSSProperties {
@@ -391,7 +576,10 @@ function stateBadgeStyle(state: ScreenRun["job"]["state"]): CSSProperties {
     failed: { background: "#ffe5e0", color: "#8f2622" },
     cancelled: { background: "#f1ecdf", color: "#6b5a19" },
     partial_failed: { background: "#fff2d9", color: "#8b5c00" },
-  } satisfies Record<ScreenRun["job"]["state"], { background: string; color: string }>;
+  } satisfies Record<
+    ScreenRun["job"]["state"],
+    { background: string; color: string }
+  >;
   return {
     padding: "0.45rem 0.75rem",
     borderRadius: "999px",

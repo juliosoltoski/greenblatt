@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -21,24 +27,30 @@ import { getScreenPresetById, screenPresets } from "@/lib/workflowPresets";
 
 type LoadState = "loading" | "ready" | "error";
 
-
 type ScreenHubProps = {
   templateId: number | null;
   draftScreenRunId: number | null;
   presetId: string | null;
 };
 
-
-export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubProps) {
+export function ScreenHub({
+  templateId,
+  draftScreenRunId,
+  presetId,
+}: ScreenHubProps) {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [universes, setUniverses] = useState<UniverseSummary[]>([]);
   const [screens, setScreens] = useState<ScreenRun[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [selectedUniverseId, setSelectedUniverseId] = useState<number | null>(null);
+  const [selectedUniverseId, setSelectedUniverseId] = useState<number | null>(
+    null,
+  );
   const [topN, setTopN] = useState(30);
-  const [momentumMode, setMomentumMode] = useState<"none" | "overlay" | "filter">("none");
+  const [momentumMode, setMomentumMode] = useState<
+    "none" | "overlay" | "filter"
+  >("none");
   const [sectorAllowlist, setSectorAllowlist] = useState("");
   const [minMarketCap, setMinMarketCap] = useState("");
   const [useCache, setUseCache] = useState(true);
@@ -65,14 +77,25 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
         setUser(currentUser);
         setUniverses(universePayload.results);
         setScreens(screenPayload.results);
-        setSelectedUniverseId((currentValue) => currentValue ?? universePayload.results[0]?.id ?? null);
-        if (templateId != null && Number.isFinite(templateId) && templateId > 0) {
+        setSelectedUniverseId(
+          (currentValue) =>
+            currentValue ?? universePayload.results[0]?.id ?? null,
+        );
+        if (
+          templateId != null &&
+          Number.isFinite(templateId) &&
+          templateId > 0
+        ) {
           const template = await getStrategyTemplate(templateId);
           if (!active) {
             return;
           }
           applyTemplateDraft(template, universePayload.results);
-        } else if (draftScreenRunId != null && Number.isFinite(draftScreenRunId) && draftScreenRunId > 0) {
+        } else if (
+          draftScreenRunId != null &&
+          Number.isFinite(draftScreenRunId) &&
+          draftScreenRunId > 0
+        ) {
           const priorRun = await getScreenRun(draftScreenRunId);
           if (!active) {
             return;
@@ -92,7 +115,11 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load screens.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load screens.",
+        );
         setState("error");
       }
     }
@@ -127,17 +154,27 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
     setScreens(payload.results);
   }
 
-  function applyTemplateDraft(template: StrategyTemplate, availableUniverses: UniverseSummary[]) {
+  function applyTemplateDraft(
+    template: StrategyTemplate,
+    availableUniverses: UniverseSummary[],
+  ) {
     if (template.workflow_kind !== "screen") {
       setError("This template belongs to backtests, not screens.");
       return;
     }
-    applyScreenConfig(template.universe.id, template.config, availableUniverses);
+    applyScreenConfig(
+      template.universe.id,
+      template.config,
+      availableUniverses,
+    );
     setShowAdvanced(true);
     setDraftNotice(`Template applied: ${template.name}`);
   }
 
-  function applyRunDraft(run: ScreenRun, availableUniverses: UniverseSummary[]) {
+  function applyRunDraft(
+    run: ScreenRun,
+    availableUniverses: UniverseSummary[],
+  ) {
     applyScreenConfig(
       run.universe.id,
       {
@@ -167,21 +204,41 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
     setUseCache(preset.useCache ?? true);
     setRefreshCache(preset.refreshCache ?? false);
     setCacheTtlHours(preset.cacheTtlHours ?? 24);
-    setShowAdvanced(Boolean(preset.sectorAllowlist?.length || preset.minMarketCap || preset.refreshCache));
+    setShowAdvanced(
+      Boolean(
+        preset.sectorAllowlist?.length ||
+        preset.minMarketCap ||
+        preset.refreshCache,
+      ),
+    );
     setDraftNotice(`Preset applied: ${preset.label}`);
   }
 
-  function applyScreenConfig(universeId: number, config: Record<string, unknown>, availableUniverses: UniverseSummary[]) {
-    const matchingUniverse = availableUniverses.find((universe) => universe.id === universeId);
+  function applyScreenConfig(
+    universeId: number,
+    config: Record<string, unknown>,
+    availableUniverses: UniverseSummary[],
+  ) {
+    const matchingUniverse = availableUniverses.find(
+      (universe) => universe.id === universeId,
+    );
     setSelectedUniverseId(matchingUniverse?.id ?? universeId);
     if (typeof config.top_n === "number") {
       setTopN(config.top_n);
     }
-    if (config.momentum_mode === "none" || config.momentum_mode === "overlay" || config.momentum_mode === "filter") {
+    if (
+      config.momentum_mode === "none" ||
+      config.momentum_mode === "overlay" ||
+      config.momentum_mode === "filter"
+    ) {
       setMomentumMode(config.momentum_mode);
     }
     if (Array.isArray(config.sector_allowlist)) {
-      setSectorAllowlist(config.sector_allowlist.filter((item): item is string => typeof item === "string").join(", "));
+      setSectorAllowlist(
+        config.sector_allowlist
+          .filter((item): item is string => typeof item === "string")
+          .join(", "),
+      );
     }
     if (typeof config.min_market_cap === "number") {
       setMinMarketCap(String(config.min_market_cap));
@@ -242,8 +299,11 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Screening</p>
-          <h1 style={titleStyle}>Loading saved universes and prior runs</h1>
+          <p style={eyebrowStyle}>Screens</p>
+          <h1 style={titleStyle}>Loading saved universes and recent screens</h1>
+          <p style={bodyStyle}>
+            Pulling in your reusable starting lists and the latest rankings.
+          </p>
         </section>
       </main>
     );
@@ -253,12 +313,14 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Screening</p>
+          <p style={eyebrowStyle}>Screens</p>
           <h1 style={titleStyle}>Screens unavailable</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load screening."}</p>
+          <p style={bodyStyle}>
+            {error ?? "Unable to open your screening workspace."}
+          </p>
           <div style={actionRowStyle}>
             <Link href="/app" style={primaryLinkStyle}>
-              Back to app
+              Back to dashboard
             </Link>
           </div>
         </section>
@@ -266,7 +328,8 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
     );
   }
 
-  const selectedUniverse = universes.find((universe) => universe.id === selectedUniverseId) ?? null;
+  const selectedUniverse =
+    universes.find((universe) => universe.id === selectedUniverseId) ?? null;
   const launchGuidance = buildScreenGuidance({
     universeEntryCount: selectedUniverse?.entry_count ?? 0,
     topN,
@@ -279,15 +342,16 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>Research</p>
-            <h1 style={titleStyle}>Run a screen from a saved universe</h1>
+            <p style={eyebrowStyle}>Screens</p>
+            <h1 style={titleStyle}>Turn a saved universe into a shortlist</h1>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Pick a
-          saved universe, keep the default launch settings for a first pass, and only open advanced
-          controls when you need sector filters or cache overrides.
+          Active workspace:{" "}
+          <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Pick
+          a saved universe, keep `Top N` modest for the first pass, and only
+          reach for advanced filters when the initial shortlist is too broad.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -296,20 +360,31 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
         <div style={layoutStyle}>
           <div style={stackStyle}>
             <section style={sectionCardStyle}>
-              <p style={sectionLabelStyle}>Launch a screen</p>
+              <p style={sectionLabelStyle}>Quick launch</p>
               <div style={presetGridStyle}>
                 {screenPresets.map((preset) => (
-                  <button key={preset.id} type="button" style={presetButtonStyle} onClick={() => applyPreset(preset.id)}>
+                  <button
+                    key={preset.id}
+                    type="button"
+                    style={presetButtonStyle}
+                    onClick={() => applyPreset(preset.id)}
+                  >
                     <strong>{preset.label}</strong>
                     <span style={presetMetaStyle}>{preset.description}</span>
                   </button>
                 ))}
               </div>
               {universes.length === 0 ? (
-                <div style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
-                  <p style={bodyStyle}>You need a saved universe before you can launch screening jobs.</p>
+                <div
+                  style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}
+                >
+                  <p style={bodyStyle}>
+                    You need a saved universe before you can run a screen. A
+                    reusable starting list keeps each ranking consistent and
+                    comparable.
+                  </p>
                   <Link href="/app/universes" style={primaryLinkStyle}>
-                    Create a universe
+                    Open universes
                   </Link>
                 </div>
               ) : (
@@ -318,7 +393,9 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                     <span style={labelStyle}>Universe</span>
                     <select
                       value={selectedUniverseId ?? ""}
-                      onChange={(event) => setSelectedUniverseId(Number(event.target.value))}
+                      onChange={(event) =>
+                        setSelectedUniverseId(Number(event.target.value))
+                      }
                       style={inputStyle}
                     >
                       {universes.map((universe) => (
@@ -336,7 +413,9 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                         min={1}
                         max={500}
                         value={topN}
-                        onChange={(event) => setTopN(Number(event.target.value))}
+                        onChange={(event) =>
+                          setTopN(Number(event.target.value))
+                        }
                         style={inputStyle}
                         required
                       />
@@ -345,7 +424,11 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                       <span style={labelStyle}>Momentum mode</span>
                       <select
                         value={momentumMode}
-                        onChange={(event) => setMomentumMode(event.target.value as "none" | "overlay" | "filter")}
+                        onChange={(event) =>
+                          setMomentumMode(
+                            event.target.value as "none" | "overlay" | "filter",
+                          )
+                        }
                         style={inputStyle}
                       >
                         <option value="none">None</option>
@@ -356,17 +439,22 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                   </div>
                   <div style={twoColumnStyle}>
                     <div style={helperCardStyle}>
-                      <strong>Default flow</strong>
+                      <strong>Start here</strong>
                       <p style={helperTextStyle}>
-                        Universe, `Top N`, and momentum mode are enough for most initial runs.
+                        Universe, `Top N`, and momentum mode are enough for a
+                        strong first pass.
                       </p>
                     </div>
                     <button
                       type="button"
                       style={secondaryButtonStyle}
-                      onClick={() => setShowAdvanced((currentValue) => !currentValue)}
+                      onClick={() =>
+                        setShowAdvanced((currentValue) => !currentValue)
+                      }
                     >
-                      {showAdvanced ? "Hide advanced settings" : "Show advanced settings"}
+                      {showAdvanced
+                        ? "Hide advanced settings"
+                        : "Show advanced settings"}
                     </button>
                   </div>
                   {showAdvanced ? (
@@ -375,8 +463,8 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                         <div>
                           <p style={sectionLabelStyle}>Advanced settings</p>
                           <p style={advancedBodyStyle}>
-                            Use these when you need tighter filtering or want to override provider
-                            cache behavior.
+                            Use these only when you need tighter filters or
+                            fresher data than the default run.
                           </p>
                         </div>
                       </div>
@@ -386,7 +474,9 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                           <input
                             type="text"
                             value={sectorAllowlist}
-                            onChange={(event) => setSectorAllowlist(event.target.value)}
+                            onChange={(event) =>
+                              setSectorAllowlist(event.target.value)
+                            }
                             placeholder="Technology, Healthcare"
                             style={inputStyle}
                           />
@@ -397,7 +487,9 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                             type="number"
                             min={0}
                             value={minMarketCap}
-                            onChange={(event) => setMinMarketCap(event.target.value)}
+                            onChange={(event) =>
+                              setMinMarketCap(event.target.value)
+                            }
                             placeholder="10000000000"
                             style={inputStyle}
                           />
@@ -405,14 +497,22 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                       </div>
                       <div style={twoColumnStyle}>
                         <label style={checkboxFieldStyle}>
-                          <input type="checkbox" checked={useCache} onChange={(event) => setUseCache(event.target.checked)} />
-                          <span>Use cached provider data</span>
+                          <input
+                            type="checkbox"
+                            checked={useCache}
+                            onChange={(event) =>
+                              setUseCache(event.target.checked)
+                            }
+                          />
+                          <span>Reuse recent cached data</span>
                         </label>
                         <label style={checkboxFieldStyle}>
                           <input
                             type="checkbox"
                             checked={refreshCache}
-                            onChange={(event) => setRefreshCache(event.target.checked)}
+                            onChange={(event) =>
+                              setRefreshCache(event.target.checked)
+                            }
                           />
                           <span>Refresh fundamentals cache first</span>
                         </label>
@@ -424,7 +524,9 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                           min={0}
                           step="1"
                           value={cacheTtlHours}
-                          onChange={(event) => setCacheTtlHours(Number(event.target.value))}
+                          onChange={(event) =>
+                            setCacheTtlHours(Number(event.target.value))
+                          }
                           style={inputStyle}
                         />
                       </label>
@@ -432,7 +534,7 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                   ) : null}
                   {launchGuidance.length > 0 ? (
                     <div style={guidanceCardStyle}>
-                      <p style={sectionLabelStyle}>Launch guidance</p>
+                      <p style={sectionLabelStyle}>Before you run</p>
                       <div style={guidanceListStyle}>
                         {launchGuidance.map((item) => (
                           <p key={item} style={guidanceTextStyle}>
@@ -442,7 +544,11 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                       </div>
                     </div>
                   ) : null}
-                  <button type="submit" style={buttonStyle} disabled={isLaunching}>
+                  <button
+                    type="submit"
+                    style={buttonStyle}
+                    disabled={isLaunching}
+                  >
                     {isLaunching ? "Launching screen..." : "Launch screen"}
                   </button>
                 </form>
@@ -457,11 +563,15 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                     <div>
                       <strong>{universe.name}</strong>
                       <div style={metaStyle}>
-                        {universe.source_type.replaceAll("_", " ")} | {universe.entry_count} names
+                        {humanizeLabel(universe.source_type)} |{" "}
+                        {universe.entry_count} names
                       </div>
                     </div>
-                    <Link href={`/app/universes/${universe.id}`} style={ghostLinkStyle}>
-                      Inspect
+                    <Link
+                      href={`/app/universes/${universe.id}`}
+                      style={ghostLinkStyle}
+                    >
+                      Open
                     </Link>
                   </div>
                 ))}
@@ -475,23 +585,33 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
                 <p style={sectionLabelStyle}>Recent screens</p>
                 <h2 style={summaryTitleStyle}>{screens.length}</h2>
               </div>
-              <span style={pillStyle}>Auto-polls active runs</span>
+              <span style={pillStyle}>Live updates</span>
             </div>
 
             <div style={runListStyle}>
               {screens.length === 0 ? (
-                <p style={bodyStyle}>No screen runs have been launched yet.</p>
+                <p style={bodyStyle}>
+                  No screens yet. Run the first pass from a saved universe and
+                  your shortlist will appear here.
+                </p>
               ) : (
                 screens.map((screen) => (
-                  <Link key={screen.id} href={`/app/screens/${screen.id}`} style={screenCardStyle}>
+                  <Link
+                    key={screen.id}
+                    href={`/app/screens/${screen.id}`}
+                    style={screenCardStyle}
+                  >
                     <div>
                       <strong>#{screen.id}</strong>
                       <div style={metaStyle}>{screen.universe.name}</div>
                       <div style={subtleMetaStyle}>
-                        {screen.result_count} ranked | {screen.exclusion_count} excluded
+                        {screen.result_count} ranked | {screen.exclusion_count}{" "}
+                        excluded
                       </div>
                     </div>
-                    <span style={stateBadgeStyle(screen.job.state)}>{screen.job.state.replaceAll("_", " ")}</span>
+                    <span style={stateBadgeStyle(screen.job.state)}>
+                      {humanizeLabel(screen.job.state)}
+                    </span>
                   </Link>
                 ))
               )}
@@ -505,9 +625,19 @@ export function ScreenHub({ templateId, draftScreenRunId, presetId }: ScreenHubP
 
 function formatApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    return error.errors.length > 0 ? `${error.message} ${error.errors.join(" ")}` : error.message;
+    return error.errors.length > 0
+      ? `${error.message} ${error.errors.join(" ")}`
+      : error.message;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function humanizeLabel(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function buildScreenGuidance(payload: {
@@ -518,15 +648,25 @@ function buildScreenGuidance(payload: {
 }): string[] {
   const messages: string[] = [];
   if (payload.universeEntryCount > 1200) {
-    messages.push("Large universes on free providers can take noticeably longer on the first run.");
+    messages.push("Large universes usually take longer on the first run.");
   }
-  if (payload.topN > 50 || (payload.universeEntryCount > 0 && payload.topN > Math.max(25, Math.floor(payload.universeEntryCount / 3)))) {
-    messages.push("A smaller Top N is usually easier to review before you widen the shortlist.");
+  if (
+    payload.topN > 50 ||
+    (payload.universeEntryCount > 0 &&
+      payload.topN > Math.max(25, Math.floor(payload.universeEntryCount / 3)))
+  ) {
+    messages.push(
+      "A smaller Top N is usually easier to review before you widen the shortlist.",
+    );
   }
   if (payload.refreshCache) {
-    messages.push("Refreshing cache first improves freshness but usually increases runtime.");
+    messages.push(
+      "Refreshing data first improves freshness but usually increases runtime.",
+    );
   } else if (!payload.useCache) {
-    messages.push("Disabling cache will force more live provider calls and may hit rate limits sooner.");
+    messages.push(
+      "Disabling cache forces more live data calls and can slow repeat runs.",
+    );
   }
   return messages;
 }
@@ -539,7 +679,10 @@ function stateBadgeStyle(state: ScreenRun["job"]["state"]): CSSProperties {
     failed: { background: "#ffe5e0", color: "#8f2622" },
     cancelled: { background: "#f1ecdf", color: "#6b5a19" },
     partial_failed: { background: "#fff2d9", color: "#8b5c00" },
-  } satisfies Record<ScreenRun["job"]["state"], { background: string; color: string }>;
+  } satisfies Record<
+    ScreenRun["job"]["state"],
+    { background: string; color: string }
+  >;
   return {
     padding: "0.45rem 0.75rem",
     borderRadius: "999px",

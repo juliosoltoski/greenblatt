@@ -344,7 +344,7 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
 
         <section style={sectionCardStyle}>
           <p style={sectionLabelStyle}>Job timeline</p>
-          <JobTimeline events={events} emptyMessage="Timeline events appear after the worker starts the run." />
+          <JobTimeline events={events} emptyMessage="Activity appears after the run starts." />
         </section>
 
         <div style={summaryGridStyle}>
@@ -371,7 +371,7 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
           <SummaryCard
             label="Research status"
             value={screenRun.is_starred ? "Starred" : "Standard"}
-            detail={screenRun.tags.length > 0 ? screenRun.tags.join(", ") : "No tags yet"}
+            detail={screenRun.tags.length > 0 ? screenRun.tags.join(", ") : "Add tags to keep this run easy to find later."}
           />
         </div>
 
@@ -455,7 +455,9 @@ export function ScreenRunDetailView({ screenRunId }: ScreenRunDetailViewProps) {
                   {rows.length === 0 ? (
                     <tr>
                       <td style={emptyCellStyle} colSpan={visibleColumnCount}>
-                        {screenRun.job.is_terminal ? "No ranked rows were persisted." : "Rows will appear once the run finishes."}
+                        {screenRun.job.is_terminal
+                          ? "This run finished without saved ranked results."
+                          : "Ranked results will appear when the run completes."}
                       </td>
                     </tr>
                   ) : (

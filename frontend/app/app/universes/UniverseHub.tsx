@@ -28,18 +28,18 @@ const creationModeOptions: Array<{
 }> = [
   {
     key: "profile",
-    label: "Built-in profile",
-    description: "Fastest way to get started",
+    label: "Starter list",
+    description: "Use a built-in market or sector list",
   },
   {
     key: "manual",
-    label: "Manual list",
-    description: "Paste a custom watchlist",
+    label: "Paste tickers",
+    description: "Build a focused watchlist by hand",
   },
   {
     key: "upload",
-    label: "Upload file",
-    description: "Import a newline-delimited ticker file",
+    label: "Upload list",
+    description: "Bring in an existing ticker file",
   },
 ];
 
@@ -209,9 +209,11 @@ export function UniverseHub() {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Universe Management</p>
-          <h1 style={titleStyle}>Loading workspace universes</h1>
-          <p style={bodyStyle}>Fetching built-in profiles, saved universes, and your active workspace.</p>
+          <p style={eyebrowStyle}>Universes</p>
+          <h1 style={titleStyle}>Loading your saved starting lists</h1>
+          <p style={bodyStyle}>
+            Pulling in built-in lists, saved universes, and your active workspace.
+          </p>
         </section>
       </main>
     );
@@ -221,12 +223,12 @@ export function UniverseHub() {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Universe Management</p>
-          <h1 style={titleStyle}>Universe loading failed</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load the universe workspace."}</p>
+          <p style={eyebrowStyle}>Universes</p>
+          <h1 style={titleStyle}>Universes unavailable</h1>
+          <p style={bodyStyle}>{error ?? "Unable to open your universe library."}</p>
           <div style={actionRowStyle}>
             <Link href="/app" style={primaryLinkStyle}>
-              Back to app
+              Back to dashboard
             </Link>
           </div>
         </section>
@@ -239,16 +241,16 @@ export function UniverseHub() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>Research Inputs</p>
-            <h1 style={titleStyle}>Create a universe without leaving the app</h1>
+            <p style={eyebrowStyle}>Universes</p>
+            <h1 style={titleStyle}>Build the starting list for every research run</h1>
           </div>
         </div>
 
         <p style={bodyStyle}>
           Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Save a
-          built-in profile for the quickest start, or switch to manual and upload modes when you
-          need a custom list. The saved universe becomes reusable across screens, backtests,
-          templates, and schedules.
+          reusable universe here, then use it across screens, backtests, templates, and recurring
+          workflows. Start with a built-in list when you want speed, and switch to custom sources
+          only when you already know the names you want to study.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -259,10 +261,10 @@ export function UniverseHub() {
               <div style={modeHeaderStyle}>
                 <div>
                   <p style={sectionLabelStyle}>Create a universe</p>
-                  <h2 style={sectionTitleStyle}>Choose the starting point that fits the job</h2>
+                  <h2 style={sectionTitleStyle}>Choose the fastest way to start</h2>
                   <p style={subtleMetaStyle}>
-                    Most first-time users should start with a built-in profile, then only switch to
-                    a custom source when they already know the target ticker set.
+                    Most first runs should start with a built-in list. Switch to a custom source
+                    only when the ticker set is already decided.
                   </p>
                 </div>
                 <div style={modeSwitchStyle}>
@@ -284,12 +286,12 @@ export function UniverseHub() {
                 <div style={modeSectionStyle}>
                   <form onSubmit={handleProfileSubmit} style={formStyle}>
                     <label style={fieldStyle}>
-                      <span style={labelStyle}>Saved universe name</span>
+                      <span style={labelStyle}>Universe name</span>
                       <input
                         type="text"
                         value={profileName}
                         onChange={(event) => setProfileName(event.target.value)}
-                        placeholder="Technology profile"
+                        placeholder="Broad market shortlist"
                         style={inputStyle}
                         required
                       />
@@ -300,7 +302,7 @@ export function UniverseHub() {
                         type="text"
                         value={profileDescription}
                         onChange={(event) => setProfileDescription(event.target.value)}
-                        placeholder="Saved from the built-in profile catalog"
+                        placeholder="Saved from a built-in market list"
                         style={inputStyle}
                       />
                     </label>
@@ -319,7 +321,7 @@ export function UniverseHub() {
                       </select>
                     </label>
                     <button type="submit" style={buttonStyle} disabled={isSubmitting === "profile"}>
-                      {isSubmitting === "profile" ? "Saving profile..." : "Save built-in universe"}
+                      {isSubmitting === "profile" ? "Saving universe..." : "Save universe"}
                     </button>
                   </form>
 
@@ -361,10 +363,10 @@ export function UniverseHub() {
               {creationMode === "manual" ? (
                 <div style={modeSectionStyle}>
                   <div style={helperCardStyle}>
-                    <strong>Best for focused watchlists</strong>
+                    <strong>Best for focused ideas</strong>
                     <p style={helperTextStyle}>
-                      Paste one ticker per line when you already know the exact names you want to
-                      research.
+                      Paste one ticker per line when the list is already decided and you want to
+                      move straight into review.
                     </p>
                   </div>
                   <form onSubmit={handleManualSubmit} style={formStyle}>
@@ -374,7 +376,7 @@ export function UniverseHub() {
                         type="text"
                         value={manualName}
                         onChange={(event) => setManualName(event.target.value)}
-                        placeholder="High conviction ideas"
+                        placeholder="High-conviction watchlist"
                         style={inputStyle}
                         required
                       />
@@ -385,7 +387,7 @@ export function UniverseHub() {
                         type="text"
                         value={manualDescription}
                         onChange={(event) => setManualDescription(event.target.value)}
-                        placeholder="Manually curated tickers"
+                        placeholder="Hand-picked names for closer review"
                         style={inputStyle}
                       />
                     </label>
@@ -400,7 +402,7 @@ export function UniverseHub() {
                       />
                     </label>
                     <button type="submit" style={buttonStyle} disabled={isSubmitting === "manual"}>
-                      {isSubmitting === "manual" ? "Creating universe..." : "Create manual universe"}
+                      {isSubmitting === "manual" ? "Saving universe..." : "Save universe"}
                     </button>
                   </form>
                 </div>
@@ -411,8 +413,7 @@ export function UniverseHub() {
                   <div style={helperCardStyle}>
                     <strong>Best for imports</strong>
                     <p style={helperTextStyle}>
-                      Use a newline-delimited text file when the source list already exists outside
-                      the app.
+                      Use a simple ticker file when the list already exists outside the workspace.
                     </p>
                   </div>
                   <form onSubmit={handleUploadSubmit} style={formStyle}>
@@ -422,7 +423,7 @@ export function UniverseHub() {
                         type="text"
                         value={uploadName}
                         onChange={(event) => setUploadName(event.target.value)}
-                        placeholder="Imported watchlist"
+                        placeholder="Imported global watchlist"
                         style={inputStyle}
                         required
                       />
@@ -433,7 +434,7 @@ export function UniverseHub() {
                         type="text"
                         value={uploadDescription}
                         onChange={(event) => setUploadDescription(event.target.value)}
-                        placeholder="Uploaded from a newline-delimited text file"
+                        placeholder="Imported from an existing research file"
                         style={inputStyle}
                       />
                     </label>
@@ -448,7 +449,7 @@ export function UniverseHub() {
                       />
                     </label>
                     <button type="submit" style={buttonStyle} disabled={isSubmitting === "upload"}>
-                      {isSubmitting === "upload" ? "Uploading..." : "Create uploaded universe"}
+                      {isSubmitting === "upload" ? "Uploading..." : "Upload and save"}
                     </button>
                   </form>
                 </div>
@@ -456,24 +457,24 @@ export function UniverseHub() {
             </div>
 
             <div style={sectionCardStyle}>
-              <p style={sectionLabelStyle}>When to use each option</p>
+              <p style={sectionLabelStyle}>Choose the quickest path</p>
               <div style={profileGridStyle}>
                 <article style={profileCardStyle}>
-                  <strong>Built-in profiles</strong>
+                  <strong>Starter lists</strong>
                   <p style={subtleMetaStyle}>
-                    Best default for broad coverage and first-time users.
+                    Best when you want broad market coverage without extra setup.
                   </p>
                 </article>
                 <article style={profileCardStyle}>
-                  <strong>Manual lists</strong>
+                  <strong>Paste tickers</strong>
                   <p style={subtleMetaStyle}>
-                    Best for a short list of conviction names or a hand-curated watchlist.
+                    Best when you already know the names that deserve a closer look.
                   </p>
                 </article>
                 <article style={profileCardStyle}>
-                  <strong>Uploads</strong>
+                  <strong>Upload list</strong>
                   <p style={subtleMetaStyle}>
-                    Best when the source ticker list already exists outside the app.
+                    Best when the source list already lives in another tool or file.
                   </p>
                 </article>
               </div>
@@ -484,7 +485,7 @@ export function UniverseHub() {
             <div style={sectionCardStyle}>
               <div style={sidebarHeaderStyle}>
                 <div>
-                  <p style={sectionLabelStyle}>Saved universes</p>
+                  <p style={sectionLabelStyle}>Saved starting lists</p>
                   <h2 style={sidebarTitleStyle}>{universes.length}</h2>
                 </div>
                 <label style={filterPillStyle}>
@@ -494,7 +495,10 @@ export function UniverseHub() {
               </div>
               <div style={universeListStyle}>
                 {universes.length === 0 ? (
-                  <p style={subtleMetaStyle}>No universes saved yet for this workspace.</p>
+                  <p style={subtleMetaStyle}>
+                    No universes saved yet. Create one from the form to give screens and backtests
+                    a reusable starting point.
+                  </p>
                 ) : (
                   universes.map((universe) => (
                     <Link key={universe.id} href={`/app/universes/${universe.id}`} style={universeRowStyle}>
@@ -504,7 +508,7 @@ export function UniverseHub() {
                           {universe.is_starred ? <span style={miniStarStyle}>Starred</span> : null}
                         </div>
                         <div style={metaStyle}>
-                          {universe.source_type.replaceAll("_", " ")} · {universe.entry_count} tickers
+                          {universe.source_type.replaceAll("_", " ")} · {universe.entry_count} stocks
                         </div>
                         {universe.tags.length > 0 ? (
                           <div style={tickerWrapStyle}>
@@ -525,7 +529,7 @@ export function UniverseHub() {
                           </div>
                         ) : null}
                       </div>
-                      <span style={arrowStyle}>View</span>
+                      <span style={arrowStyle}>Open</span>
                     </Link>
                   ))
                 )}

@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -17,10 +23,14 @@ import {
   type StrategyTemplate,
   type UniverseSummary,
 } from "@/lib/api";
-import { backtestPresets, getBacktestPresetById, isoDateDaysAgo, isoDateYearsAgo } from "@/lib/workflowPresets";
+import {
+  backtestPresets,
+  getBacktestPresetById,
+  isoDateDaysAgo,
+  isoDateYearsAgo,
+} from "@/lib/workflowPresets";
 
 type LoadState = "loading" | "ready" | "error";
-
 
 function isoDateOffset(daysAgo: number): string {
   const value = new Date();
@@ -28,29 +38,35 @@ function isoDateOffset(daysAgo: number): string {
   return value.toISOString().slice(0, 10);
 }
 
-
 type BacktestHubProps = {
   templateId: number | null;
   draftBacktestRunId: number | null;
   presetId: string | null;
 };
 
-
-export function BacktestHub({ templateId, draftBacktestRunId, presetId }: BacktestHubProps) {
+export function BacktestHub({
+  templateId,
+  draftBacktestRunId,
+  presetId,
+}: BacktestHubProps) {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [universes, setUniverses] = useState<UniverseSummary[]>([]);
   const [backtests, setBacktests] = useState<BacktestRun[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [selectedUniverseId, setSelectedUniverseId] = useState<number | null>(null);
+  const [selectedUniverseId, setSelectedUniverseId] = useState<number | null>(
+    null,
+  );
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [initialCapital, setInitialCapital] = useState(100000);
   const [portfolioSize, setPortfolioSize] = useState(20);
   const [reviewFrequency, setReviewFrequency] = useState("W-FRI");
   const [benchmark, setBenchmark] = useState("^GSPC");
-  const [momentumMode, setMomentumMode] = useState<"none" | "overlay" | "filter">("none");
+  const [momentumMode, setMomentumMode] = useState<
+    "none" | "overlay" | "filter"
+  >("none");
   const [sectorAllowlist, setSectorAllowlist] = useState("");
   const [minMarketCap, setMinMarketCap] = useState("");
   const [useCache, setUseCache] = useState(true);
@@ -77,14 +93,25 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
         setUser(currentUser);
         setUniverses(universePayload.results);
         setBacktests(backtestPayload.results);
-        setSelectedUniverseId((currentValue) => currentValue ?? universePayload.results[0]?.id ?? null);
-        if (templateId != null && Number.isFinite(templateId) && templateId > 0) {
+        setSelectedUniverseId(
+          (currentValue) =>
+            currentValue ?? universePayload.results[0]?.id ?? null,
+        );
+        if (
+          templateId != null &&
+          Number.isFinite(templateId) &&
+          templateId > 0
+        ) {
           const template = await getStrategyTemplate(templateId);
           if (!active) {
             return;
           }
           applyTemplateDraft(template, universePayload.results);
-        } else if (draftBacktestRunId != null && Number.isFinite(draftBacktestRunId) && draftBacktestRunId > 0) {
+        } else if (
+          draftBacktestRunId != null &&
+          Number.isFinite(draftBacktestRunId) &&
+          draftBacktestRunId > 0
+        ) {
           const priorRun = await getBacktestRun(draftBacktestRunId);
           if (!active) {
             return;
@@ -104,7 +131,11 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load backtests.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load backtests.",
+        );
         setState("error");
       }
     }
@@ -144,17 +175,27 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
     setBacktests(payload.results);
   }
 
-  function applyTemplateDraft(template: StrategyTemplate, availableUniverses: UniverseSummary[]) {
+  function applyTemplateDraft(
+    template: StrategyTemplate,
+    availableUniverses: UniverseSummary[],
+  ) {
     if (template.workflow_kind !== "backtest") {
       setError("This template belongs to screens, not backtests.");
       return;
     }
-    applyBacktestConfig(template.universe.id, template.config, availableUniverses);
+    applyBacktestConfig(
+      template.universe.id,
+      template.config,
+      availableUniverses,
+    );
     setShowAdvanced(true);
     setDraftNotice(`Template applied: ${template.name}`);
   }
 
-  function applyRunDraft(run: BacktestRun, availableUniverses: UniverseSummary[]) {
+  function applyRunDraft(
+    run: BacktestRun,
+    availableUniverses: UniverseSummary[],
+  ) {
     applyBacktestConfig(
       run.universe.id,
       {
@@ -194,7 +235,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
     setUseCache(preset.useCache ?? true);
     setRefreshCache(preset.refreshCache ?? false);
     setCacheTtlHours(preset.cacheTtlHours ?? 24);
-    setShowAdvanced(Boolean(preset.sectorAllowlist?.length || preset.minMarketCap));
+    setShowAdvanced(
+      Boolean(preset.sectorAllowlist?.length || preset.minMarketCap),
+    );
     setDraftNotice(`Preset applied: ${preset.label}`);
   }
 
@@ -203,7 +246,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
     config: Record<string, unknown>,
     availableUniverses: UniverseSummary[],
   ) {
-    const matchingUniverse = availableUniverses.find((universe) => universe.id === universeId);
+    const matchingUniverse = availableUniverses.find(
+      (universe) => universe.id === universeId,
+    );
     setSelectedUniverseId(matchingUniverse?.id ?? universeId);
     if (typeof config.start_date === "string") {
       setStartDate(config.start_date);
@@ -223,11 +268,19 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
     if (typeof config.benchmark === "string") {
       setBenchmark(config.benchmark);
     }
-    if (config.momentum_mode === "none" || config.momentum_mode === "overlay" || config.momentum_mode === "filter") {
+    if (
+      config.momentum_mode === "none" ||
+      config.momentum_mode === "overlay" ||
+      config.momentum_mode === "filter"
+    ) {
       setMomentumMode(config.momentum_mode);
     }
     if (Array.isArray(config.sector_allowlist)) {
-      setSectorAllowlist(config.sector_allowlist.filter((item): item is string => typeof item === "string").join(", "));
+      setSectorAllowlist(
+        config.sector_allowlist
+          .filter((item): item is string => typeof item === "string")
+          .join(", "),
+      );
     }
     if (typeof config.min_market_cap === "number") {
       setMinMarketCap(String(config.min_market_cap));
@@ -252,7 +305,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
       return;
     }
     if (selectedUniverseId == null) {
-      setError("Create or select a saved universe before launching a backtest.");
+      setError(
+        "Create or select a saved universe before launching a backtest.",
+      );
       return;
     }
 
@@ -293,8 +348,14 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Backtesting</p>
-          <h1 style={titleStyle}>Loading saved universes and prior backtests</h1>
+          <p style={eyebrowStyle}>Backtests</p>
+          <h1 style={titleStyle}>
+            Loading saved universes and recent backtests
+          </h1>
+          <p style={bodyStyle}>
+            Pulling in your reusable starting lists and the latest historical
+            runs.
+          </p>
         </section>
       </main>
     );
@@ -304,12 +365,14 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Backtesting</p>
+          <p style={eyebrowStyle}>Backtests</p>
           <h1 style={titleStyle}>Backtests unavailable</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load backtests."}</p>
+          <p style={bodyStyle}>
+            {error ?? "Unable to open your backtesting workspace."}
+          </p>
           <div style={actionRowStyle}>
             <Link href="/app" style={primaryLinkStyle}>
-              Back to app
+              Back to dashboard
             </Link>
           </div>
         </section>
@@ -317,7 +380,8 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
     );
   }
 
-  const selectedUniverse = universes.find((universe) => universe.id === selectedUniverseId) ?? null;
+  const selectedUniverse =
+    universes.find((universe) => universe.id === selectedUniverseId) ?? null;
   const launchGuidance = buildBacktestGuidance({
     universeEntryCount: selectedUniverse?.entry_count ?? 0,
     portfolioSize,
@@ -332,15 +396,16 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>Portfolio Research</p>
-            <h1 style={titleStyle}>Backtest a saved universe</h1>
+            <p style={eyebrowStyle}>Backtests</p>
+            <h1 style={titleStyle}>Test a shortlist across history</h1>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Start
-          with the default rebalance assumptions, choose a sensible date range, and only open
-          advanced settings when you need benchmark, filter, or cache overrides.
+          Active workspace:{" "}
+          <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Start
+          with a sensible date range and portfolio size, then use the first pass
+          to decide whether the idea deserves deeper work.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -349,20 +414,31 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
         <div style={layoutStyle}>
           <div style={stackStyle}>
             <section style={sectionCardStyle}>
-              <p style={sectionLabelStyle}>Launch a backtest</p>
+              <p style={sectionLabelStyle}>Quick launch</p>
               <div style={presetGridStyle}>
                 {backtestPresets.map((preset) => (
-                  <button key={preset.id} type="button" style={presetButtonStyle} onClick={() => applyPreset(preset.id)}>
+                  <button
+                    key={preset.id}
+                    type="button"
+                    style={presetButtonStyle}
+                    onClick={() => applyPreset(preset.id)}
+                  >
                     <strong>{preset.label}</strong>
                     <span style={presetMetaStyle}>{preset.description}</span>
                   </button>
                 ))}
               </div>
               {universes.length === 0 ? (
-                <div style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}>
-                  <p style={bodyStyle}>You need a saved universe before you can launch backtests.</p>
+                <div
+                  style={{ display: "grid", gap: "0.75rem", marginTop: "1rem" }}
+                >
+                  <p style={bodyStyle}>
+                    You need a saved universe before you can start a backtest. A
+                    reusable starting list keeps your historical comparisons
+                    consistent.
+                  </p>
                   <Link href="/app/universes" style={primaryLinkStyle}>
-                    Create a universe
+                    Open universes
                   </Link>
                 </div>
               ) : (
@@ -371,7 +447,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                     <span style={labelStyle}>Universe</span>
                     <select
                       value={selectedUniverseId ?? ""}
-                      onChange={(event) => setSelectedUniverseId(Number(event.target.value))}
+                      onChange={(event) =>
+                        setSelectedUniverseId(Number(event.target.value))
+                      }
                       style={inputStyle}
                     >
                       {universes.map((universe) => (
@@ -384,11 +462,21 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                   <div style={threeColumnStyle}>
                     <label style={fieldStyle}>
                       <span style={labelStyle}>Start date</span>
-                      <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} style={inputStyle} />
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(event) => setStartDate(event.target.value)}
+                        style={inputStyle}
+                      />
                     </label>
                     <label style={fieldStyle}>
                       <span style={labelStyle}>End date</span>
-                      <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} style={inputStyle} />
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(event) => setEndDate(event.target.value)}
+                        style={inputStyle}
+                      />
                     </label>
                   </div>
                   <div style={threeColumnStyle}>
@@ -398,7 +486,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                         type="number"
                         min={1}
                         value={initialCapital}
-                        onChange={(event) => setInitialCapital(Number(event.target.value))}
+                        onChange={(event) =>
+                          setInitialCapital(Number(event.target.value))
+                        }
                         style={inputStyle}
                       />
                     </label>
@@ -409,25 +499,31 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                         min={1}
                         max={200}
                         value={portfolioSize}
-                        onChange={(event) => setPortfolioSize(Number(event.target.value))}
+                        onChange={(event) =>
+                          setPortfolioSize(Number(event.target.value))
+                        }
                         style={inputStyle}
                       />
                     </label>
                   </div>
                   <div style={threeColumnStyle}>
                     <div style={helperCardStyle}>
-                      <strong>Default flow</strong>
+                      <strong>Start here</strong>
                       <p style={helperTextStyle}>
-                        Universe, date range, portfolio size, and capital are enough for a clean
-                        first pass.
+                        Universe, date range, portfolio size, and capital are
+                        enough for a clean first pass.
                       </p>
                     </div>
                     <button
                       type="button"
                       style={secondaryButtonStyle}
-                      onClick={() => setShowAdvanced((currentValue) => !currentValue)}
+                      onClick={() =>
+                        setShowAdvanced((currentValue) => !currentValue)
+                      }
                     >
-                      {showAdvanced ? "Hide advanced settings" : "Show advanced settings"}
+                      {showAdvanced
+                        ? "Hide advanced settings"
+                        : "Show advanced settings"}
                     </button>
                   </div>
                   {showAdvanced ? (
@@ -435,21 +531,31 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                       <div>
                         <p style={sectionLabelStyle}>Advanced settings</p>
                         <p style={advancedBodyStyle}>
-                          Tune benchmark, rebalance cadence, filters, and cache controls only when
-                          the defaults are not enough.
+                          Use these only when benchmark choice, rebalance
+                          cadence, filters, or fresher data will materially
+                          change the research question.
                         </p>
                       </div>
                       <div style={threeColumnStyle}>
                         <label style={fieldStyle}>
                           <span style={labelStyle}>Benchmark</span>
-                          <input type="text" value={benchmark} onChange={(event) => setBenchmark(event.target.value)} style={inputStyle} />
+                          <input
+                            type="text"
+                            value={benchmark}
+                            onChange={(event) =>
+                              setBenchmark(event.target.value)
+                            }
+                            style={inputStyle}
+                          />
                         </label>
                         <label style={fieldStyle}>
                           <span style={labelStyle}>Review frequency</span>
                           <input
                             type="text"
                             value={reviewFrequency}
-                            onChange={(event) => setReviewFrequency(event.target.value)}
+                            onChange={(event) =>
+                              setReviewFrequency(event.target.value)
+                            }
                             placeholder="W-FRI"
                             style={inputStyle}
                           />
@@ -458,7 +564,14 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                           <span style={labelStyle}>Momentum mode</span>
                           <select
                             value={momentumMode}
-                            onChange={(event) => setMomentumMode(event.target.value as "none" | "overlay" | "filter")}
+                            onChange={(event) =>
+                              setMomentumMode(
+                                event.target.value as
+                                  | "none"
+                                  | "overlay"
+                                  | "filter",
+                              )
+                            }
                             style={inputStyle}
                           >
                             <option value="none">None</option>
@@ -473,7 +586,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                           <input
                             type="text"
                             value={sectorAllowlist}
-                            onChange={(event) => setSectorAllowlist(event.target.value)}
+                            onChange={(event) =>
+                              setSectorAllowlist(event.target.value)
+                            }
                             placeholder="Technology, Healthcare"
                             style={inputStyle}
                           />
@@ -484,7 +599,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                             type="number"
                             min={0}
                             value={minMarketCap}
-                            onChange={(event) => setMinMarketCap(event.target.value)}
+                            onChange={(event) =>
+                              setMinMarketCap(event.target.value)
+                            }
                             placeholder="5000000000"
                             style={inputStyle}
                           />
@@ -495,21 +612,31 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                             type="number"
                             min={0}
                             value={cacheTtlHours}
-                            onChange={(event) => setCacheTtlHours(Number(event.target.value))}
+                            onChange={(event) =>
+                              setCacheTtlHours(Number(event.target.value))
+                            }
                             style={inputStyle}
                           />
                         </label>
                       </div>
                       <div style={threeColumnStyle}>
                         <label style={checkboxFieldStyle}>
-                          <input type="checkbox" checked={useCache} onChange={(event) => setUseCache(event.target.checked)} />
-                          <span>Use cached provider data</span>
+                          <input
+                            type="checkbox"
+                            checked={useCache}
+                            onChange={(event) =>
+                              setUseCache(event.target.checked)
+                            }
+                          />
+                          <span>Reuse recent cached data</span>
                         </label>
                         <label style={checkboxFieldStyle}>
                           <input
                             type="checkbox"
                             checked={refreshCache}
-                            onChange={(event) => setRefreshCache(event.target.checked)}
+                            onChange={(event) =>
+                              setRefreshCache(event.target.checked)
+                            }
                           />
                           <span>Refresh fundamentals cache first</span>
                         </label>
@@ -518,7 +645,7 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                   ) : null}
                   {launchGuidance.length > 0 ? (
                     <div style={guidanceCardStyle}>
-                      <p style={sectionLabelStyle}>Launch guidance</p>
+                      <p style={sectionLabelStyle}>Before you run</p>
                       <div style={guidanceListStyle}>
                         {launchGuidance.map((item) => (
                           <p key={item} style={guidanceTextStyle}>
@@ -528,7 +655,11 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                       </div>
                     </div>
                   ) : null}
-                  <button type="submit" style={buttonStyle} disabled={isLaunching}>
+                  <button
+                    type="submit"
+                    style={buttonStyle}
+                    disabled={isLaunching}
+                  >
                     {isLaunching ? "Launching backtest..." : "Launch backtest"}
                   </button>
                 </form>
@@ -542,15 +673,22 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                 <p style={sectionLabelStyle}>Recent backtests</p>
                 <h2 style={summaryTitleStyle}>{backtests.length}</h2>
               </div>
-              <span style={pillStyle}>Auto-polls active runs</span>
+              <span style={pillStyle}>Live updates</span>
             </div>
 
             <div style={runListStyle}>
               {backtests.length === 0 ? (
-                <p style={bodyStyle}>No backtests have been launched yet.</p>
+                <p style={bodyStyle}>
+                  No backtests yet. Start one from a saved universe to see
+                  performance, trades, and review targets here.
+                </p>
               ) : (
                 backtests.map((backtest) => (
-                  <Link key={backtest.id} href={`/app/backtests/${backtest.id}`} style={runCardStyle}>
+                  <Link
+                    key={backtest.id}
+                    href={`/app/backtests/${backtest.id}`}
+                    style={runCardStyle}
+                  >
                     <div>
                       <strong>#{backtest.id}</strong>
                       <div style={metaStyle}>{backtest.universe.name}</div>
@@ -558,7 +696,9 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
                         {backtest.start_date} to {backtest.end_date}
                       </div>
                     </div>
-                    <span style={stateBadgeStyle(backtest.job.state)}>{backtest.job.state.replaceAll("_", " ")}</span>
+                    <span style={stateBadgeStyle(backtest.job.state)}>
+                      {humanizeLabel(backtest.job.state)}
+                    </span>
                   </Link>
                 ))
               )}
@@ -572,9 +712,19 @@ export function BacktestHub({ templateId, draftBacktestRunId, presetId }: Backte
 
 function formatApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    return error.errors.length > 0 ? `${error.message} ${error.errors.join(" ")}` : error.message;
+    return error.errors.length > 0
+      ? `${error.message} ${error.errors.join(" ")}`
+      : error.message;
   }
   return error instanceof Error ? error.message : fallback;
+}
+
+function humanizeLabel(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function buildBacktestGuidance(payload: {
@@ -589,19 +739,34 @@ function buildBacktestGuidance(payload: {
   const start = payload.startDate ? new Date(payload.startDate) : null;
   const end = payload.endDate ? new Date(payload.endDate) : null;
   const durationDays =
-    start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())
+    start &&
+    end &&
+    !Number.isNaN(start.getTime()) &&
+    !Number.isNaN(end.getTime())
       ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000))
       : 0;
   if (payload.universeEntryCount > 250 && durationDays > 730) {
-    messages.push("Large universes over long date ranges create heavier backtests and may take longer to finish.");
+    messages.push(
+      "Large universes over long date ranges usually take longer to finish.",
+    );
   }
-  if (payload.universeEntryCount > 0 && payload.portfolioSize > Math.max(20, Math.floor(payload.universeEntryCount / 2))) {
-    messages.push("A smaller portfolio size is usually easier to interpret when the universe itself is small.");
+  if (
+    payload.universeEntryCount > 0 &&
+    payload.portfolioSize >
+      Math.max(20, Math.floor(payload.universeEntryCount / 2))
+  ) {
+    messages.push(
+      "A smaller portfolio size is usually easier to interpret when the universe itself is small.",
+    );
   }
   if (payload.refreshCache) {
-    messages.push("Refreshing cache first improves freshness but usually increases runtime.");
+    messages.push(
+      "Refreshing data first improves freshness but usually increases runtime.",
+    );
   } else if (!payload.useCache) {
-    messages.push("Disabling cache will force more live provider calls and can slow repeated backtests.");
+    messages.push(
+      "Disabling cache forces more live data calls and can slow repeated backtests.",
+    );
   }
   return messages;
 }
@@ -614,7 +779,10 @@ function stateBadgeStyle(state: BacktestRun["job"]["state"]): CSSProperties {
     failed: { background: "#ffe5e0", color: "#8f2622" },
     cancelled: { background: "#f1ecdf", color: "#6b5a19" },
     partial_failed: { background: "#fff2d9", color: "#8b5c00" },
-  } satisfies Record<BacktestRun["job"]["state"], { background: string; color: string }>;
+  } satisfies Record<
+    BacktestRun["job"]["state"],
+    { background: string; color: string }
+  >;
   return {
     padding: "0.45rem 0.75rem",
     borderRadius: "999px",

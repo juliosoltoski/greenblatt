@@ -116,7 +116,7 @@ export function TemplateDetailView({ templateId }: TemplateDetailViewProps) {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Template</p>
-          <h1 style={titleStyle}>Loading template</h1>
+          <h1 style={titleStyle}>Loading saved workflow</h1>
         </section>
       </main>
     );
@@ -147,26 +147,38 @@ export function TemplateDetailView({ templateId }: TemplateDetailViewProps) {
               All templates
             </Link>
             <Link href={`/app/universes/${template.universe.id}`} style={ghostLinkStyle}>
-              Universe
+              Open universe
             </Link>
             <button type="button" style={buttonStyle} onClick={() => void handleLaunch()} disabled={isLaunching}>
-              {isLaunching ? "Launching..." : `Launch ${template.workflow_kind}`}
+              {isLaunching ? "Launching..." : template.workflow_kind === "screen" ? "Run screen" : "Start backtest"}
             </button>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Review and annotate saved strategy setups here instead of overloading the main list view.
-          Use the collaboration panel to add comments, share links, and collections when the
-          template is ready for a wider audience.
+          Review the notes, launch settings, and status behind this reusable workflow. When the
+          setup is ready to share, add collaboration context here instead of overloading the main
+          template list.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
 
         <div style={summaryGridStyle}>
-          <SummaryCard label="Workflow" value={template.workflow_kind} detail={template.universe.name} />
-          <SummaryCard label="Review" value={template.review_status.replaceAll("_", " ")} detail={template.reviewed_at ? new Date(template.reviewed_at).toLocaleString() : "Not reviewed yet"} />
-          <SummaryCard label="Created" value={new Date(template.created_at).toLocaleDateString()} detail={template.last_used_at ? `Last used ${new Date(template.last_used_at).toLocaleDateString()}` : "Not used yet"} />
+          <SummaryCard label="Workflow" value={humanizeLabel(template.workflow_kind)} detail={template.universe.name} />
+          <SummaryCard
+            label="Review"
+            value={humanizeLabel(template.review_status)}
+            detail={template.reviewed_at ? new Date(template.reviewed_at).toLocaleString() : "Review still pending"}
+          />
+          <SummaryCard
+            label="Created"
+            value={new Date(template.created_at).toLocaleDateString()}
+            detail={
+              template.last_used_at
+                ? `Last used ${new Date(template.last_used_at).toLocaleDateString()}`
+                : "Not launched from this template yet"
+            }
+          />
         </div>
 
         <form onSubmit={handleSave} style={formStyle}>
@@ -199,7 +211,10 @@ export function TemplateDetailView({ templateId }: TemplateDetailViewProps) {
         </form>
 
         <section style={cardStyle}>
-          <h2 style={sectionTitleStyle}>Saved configuration</h2>
+          <h2 style={sectionTitleStyle}>Launch settings</h2>
+          <p style={bodyStyle}>
+            This is the saved configuration that will be used the next time you run the template.
+          </p>
           <pre style={preStyle}>{JSON.stringify(template.config, null, 2)}</pre>
         </section>
 
@@ -231,6 +246,14 @@ function formatApiError(error: unknown, fallback: string): string {
     return error.message;
   }
   return fallback;
+}
+
+function humanizeLabel(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 const pageStyle: CSSProperties = {

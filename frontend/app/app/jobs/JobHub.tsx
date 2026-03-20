@@ -1,6 +1,13 @@
 "use client";
 
-import { startTransition, useEffect, useEffectEvent, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -22,7 +29,6 @@ import { useJobStream } from "@/lib/jobStream";
 
 type LoadState = "loading" | "ready" | "error";
 
-
 export function JobHub() {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
@@ -33,7 +39,9 @@ export function JobHub() {
   const [error, setError] = useState<string | null>(null);
   const [stepCount, setStepCount] = useState(4);
   const [stepDelayMs, setStepDelayMs] = useState(750);
-  const [failureMode, setFailureMode] = useState<"success" | "fail" | "retry_once">("success");
+  const [failureMode, setFailureMode] = useState<
+    "success" | "fail" | "retry_once"
+  >("success");
   const [isLaunching, setIsLaunching] = useState(false);
   const [jobAction, setJobAction] = useState<"cancel" | "retry" | null>(null);
 
@@ -45,7 +53,9 @@ export function JobHub() {
         const currentUser = await getCurrentUser();
         const workspaceId = currentUser.active_workspace?.id;
         const jobPayload = await listJobs(workspaceId, 20);
-        const eventPayload = jobPayload.results[0] ? await listJobEvents(jobPayload.results[0].id, 80) : null;
+        const eventPayload = jobPayload.results[0]
+          ? await listJobEvents(jobPayload.results[0].id, 80)
+          : null;
         if (!active) {
           return;
         }
@@ -64,7 +74,11 @@ export function JobHub() {
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load jobs.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load jobs.",
+        );
         setState("error");
       }
     }
@@ -98,16 +112,21 @@ export function JobHub() {
 
   useJobStream({
     jobId: selectedJob?.id ?? null,
-    enabled: state === "ready" && selectedJob != null && !selectedJob.is_terminal,
+    enabled:
+      state === "ready" && selectedJob != null && !selectedJob.is_terminal,
     onJob: handleStreamJob,
     onEvent: handleStreamEvent,
   });
 
-  async function refreshJobs(workspaceId?: number, focusJobId: number | null = null) {
+  async function refreshJobs(
+    workspaceId?: number,
+    focusJobId: number | null = null,
+  ) {
     const listPayload = await listJobs(workspaceId, 20);
     setJobs(listPayload.results);
 
-    const nextSelectedId = focusJobId ?? selectedJob?.id ?? listPayload.results[0]?.id ?? null;
+    const nextSelectedId =
+      focusJobId ?? selectedJob?.id ?? listPayload.results[0]?.id ?? null;
     if (nextSelectedId == null) {
       setSelectedJob(null);
       return;
@@ -137,7 +156,7 @@ export function JobHub() {
       setSelectedJob(launched);
       await refreshJobs(user.active_workspace.id, launched.id);
     } catch (launchError) {
-      setError(formatApiError(launchError, "Unable to launch smoke job."));
+      setError(formatApiError(launchError, "Unable to launch queue check."));
     } finally {
       setIsLaunching(false);
     }
@@ -146,7 +165,10 @@ export function JobHub() {
   async function handleSelectJob(jobId: number) {
     try {
       setError(null);
-      const [detail, eventPayload] = await Promise.all([getJob(jobId), listJobEvents(jobId, 80)]);
+      const [detail, eventPayload] = await Promise.all([
+        getJob(jobId),
+        listJobEvents(jobId, 80),
+      ]);
       setSelectedJob(detail);
       setEvents(eventPayload.results);
     } catch (loadError) {
@@ -165,7 +187,9 @@ export function JobHub() {
       setSelectedJob(updated);
       await refreshJobs(user?.active_workspace?.id, updated.id);
     } catch (cancelError) {
-      setError(formatApiError(cancelError, "Unable to request job cancellation."));
+      setError(
+        formatApiError(cancelError, "Unable to request job cancellation."),
+      );
     } finally {
       setJobAction(null);
     }
@@ -192,9 +216,11 @@ export function JobHub() {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Async Jobs</p>
-          <h1 style={titleStyle}>Loading job framework</h1>
-          <p style={bodyStyle}>Fetching your recent jobs and workspace context.</p>
+          <p style={eyebrowStyle}>Jobs</p>
+          <h1 style={titleStyle}>Loading background work</h1>
+          <p style={bodyStyle}>
+            Fetching your recent jobs and workspace context.
+          </p>
         </section>
       </main>
     );
@@ -204,12 +230,14 @@ export function JobHub() {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Async Jobs</p>
+          <p style={eyebrowStyle}>Jobs</p>
           <h1 style={titleStyle}>Jobs unavailable</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load the job dashboard."}</p>
+          <p style={bodyStyle}>
+            {error ?? "Unable to load the job dashboard."}
+          </p>
           <div style={actionRowStyle}>
             <Link href="/app" style={primaryLinkStyle}>
-              Back to app
+              Back to dashboard
             </Link>
           </div>
         </section>
@@ -222,26 +250,28 @@ export function JobHub() {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>M4 Async Job Framework</p>
-            <h1 style={titleStyle}>Launch and monitor background jobs</h1>
+            <p style={eyebrowStyle}>Jobs</p>
+            <h1 style={titleStyle}>Monitor background work</h1>
           </div>
           <div style={actionRowStyle}>
             <Link href="/app" style={ghostLinkStyle}>
-              App shell
+              Dashboard
             </Link>
             <Link href="/app/universes" style={ghostLinkStyle}>
-              Universes
+              Open universes
             </Link>
             <a href="http://localhost:8000/admin/" style={ghostLinkStyle}>
-              Django admin
+              Admin console
             </a>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Active workspace: <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. This
-          smoke task exercises the first job pipeline end to end: API request, persisted job
-          record, Celery execution, timeline events, retries, and live status streaming.
+          Active workspace:{" "}
+          <strong>{user.active_workspace?.name ?? "Unavailable"}</strong>. Use
+          this page to watch automated runs, maintenance work, and queue checks.
+          The launcher below is a support tool for verifying that the job system
+          is healthy end to end.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -249,7 +279,7 @@ export function JobHub() {
         <div style={layoutStyle}>
           <div style={stackStyle}>
             <section style={sectionCardStyle}>
-              <p style={sectionLabelStyle}>Smoke task launcher</p>
+              <p style={sectionLabelStyle}>Queue check launcher</p>
               <form onSubmit={handleLaunch} style={formStyle}>
                 <label style={fieldStyle}>
                   <span style={labelStyle}>Step count</span>
@@ -258,7 +288,9 @@ export function JobHub() {
                     min={1}
                     max={8}
                     value={stepCount}
-                    onChange={(event) => setStepCount(Number(event.target.value))}
+                    onChange={(event) =>
+                      setStepCount(Number(event.target.value))
+                    }
                     style={inputStyle}
                     required
                   />
@@ -270,7 +302,9 @@ export function JobHub() {
                     min={0}
                     max={5000}
                     value={stepDelayMs}
-                    onChange={(event) => setStepDelayMs(Number(event.target.value))}
+                    onChange={(event) =>
+                      setStepDelayMs(Number(event.target.value))
+                    }
                     style={inputStyle}
                     required
                   />
@@ -279,7 +313,11 @@ export function JobHub() {
                   <span style={labelStyle}>Failure mode</span>
                   <select
                     value={failureMode}
-                    onChange={(event) => setFailureMode(event.target.value as "success" | "fail" | "retry_once")}
+                    onChange={(event) =>
+                      setFailureMode(
+                        event.target.value as "success" | "fail" | "retry_once",
+                      )
+                    }
                     style={inputStyle}
                   >
                     <option value="success">Success</option>
@@ -287,8 +325,12 @@ export function JobHub() {
                     <option value="fail">Fail</option>
                   </select>
                 </label>
-                <button type="submit" style={buttonStyle} disabled={isLaunching}>
-                  {isLaunching ? "Launching..." : "Launch smoke job"}
+                <button
+                  type="submit"
+                  style={buttonStyle}
+                  disabled={isLaunching}
+                >
+                  {isLaunching ? "Launching..." : "Run queue check"}
                 </button>
               </form>
             </section>
@@ -297,9 +339,15 @@ export function JobHub() {
               <div style={statusHeaderStyle}>
                 <div>
                   <p style={sectionLabelStyle}>Selected job</p>
-                  <h2 style={statusTitleStyle}>{selectedJob ? `#${selectedJob.id}` : "No job selected"}</h2>
+                  <h2 style={statusTitleStyle}>
+                    {selectedJob ? `#${selectedJob.id}` : "No job selected"}
+                  </h2>
                 </div>
-                {selectedJob ? <span style={stateBadgeStyle(selectedJob.state)}>{selectedJob.state.replaceAll("_", " ")}</span> : null}
+                {selectedJob ? (
+                  <span style={stateBadgeStyle(selectedJob.state)}>
+                    {humanizeLabel(selectedJob.state)}
+                  </span>
+                ) : null}
               </div>
 
               {selectedJob ? (
@@ -322,7 +370,7 @@ export function JobHub() {
                   <div style={summaryGridStyle}>
                     <div style={summaryCardStyle}>
                       <p style={sectionLabelStyle}>Type</p>
-                      <strong>{selectedJob.job_type}</strong>
+                      <strong>{humanizeLabel(selectedJob.job_type)}</strong>
                     </div>
                     <div style={summaryCardStyle}>
                       <p style={sectionLabelStyle}>Retries</p>
@@ -330,36 +378,64 @@ export function JobHub() {
                     </div>
                     <div style={summaryCardStyle}>
                       <p style={sectionLabelStyle}>Task id</p>
-                      <code style={codeStyle}>{selectedJob.celery_task_id ?? "pending"}</code>
+                      <code style={codeStyle}>
+                        {selectedJob.celery_task_id ?? "pending"}
+                      </code>
                     </div>
                   </div>
 
                   {selectedJob.error_message ? (
                     <div style={failureBoxStyle}>
                       <strong>{selectedJob.error_code ?? "job_failed"}</strong>
-                      <p style={{ margin: "0.5rem 0 0" }}>{selectedJob.error_message}</p>
+                      <p style={{ margin: "0.5rem 0 0" }}>
+                        {selectedJob.error_message}
+                      </p>
                     </div>
                   ) : null}
 
                   <div style={actionRowStyle}>
                     {!selectedJob.is_terminal ? (
-                      <button type="button" style={buttonStyle} onClick={() => void handleCancelSelectedJob()} disabled={jobAction === "cancel"}>
-                        {jobAction === "cancel" ? "Cancelling..." : "Request cancel"}
+                      <button
+                        type="button"
+                        style={buttonStyle}
+                        onClick={() => void handleCancelSelectedJob()}
+                        disabled={jobAction === "cancel"}
+                      >
+                        {jobAction === "cancel"
+                          ? "Cancelling..."
+                          : "Request cancel"}
                       </button>
                     ) : null}
-                    {selectedJob.is_terminal && selectedJob.job_type === "smoke_test" ? (
-                      <button type="button" style={buttonStyle} onClick={() => void handleRetrySelectedJob()} disabled={jobAction === "retry"}>
-                        {jobAction === "retry" ? "Retrying..." : "Retry smoke job"}
+                    {selectedJob.is_terminal &&
+                    selectedJob.job_type === "smoke_test" ? (
+                      <button
+                        type="button"
+                        style={buttonStyle}
+                        onClick={() => void handleRetrySelectedJob()}
+                        disabled={jobAction === "retry"}
+                      >
+                        {jobAction === "retry"
+                          ? "Retrying..."
+                          : "Retry queue check"}
                       </button>
                     ) : null}
-                    {selectedJob.cancellation_requested ? <span style={pillStyle}>Cancellation requested</span> : null}
+                    {selectedJob.cancellation_requested ? (
+                      <span style={pillStyle}>Cancellation requested</span>
+                    ) : null}
                   </div>
 
                   <div style={detailGridStyle}>
                     <div style={detailCardStyle}>
                       <p style={sectionLabelStyle}>Requested payload</p>
                       <pre style={preStyle}>
-                        {JSON.stringify((selectedJob.metadata.request ?? {}) as Record<string, unknown>, null, 2)}
+                        {JSON.stringify(
+                          (selectedJob.metadata.request ?? {}) as Record<
+                            string,
+                            unknown
+                          >,
+                          null,
+                          2,
+                        )}
                       </pre>
                     </div>
                     <div style={detailCardStyle}>
@@ -379,11 +455,16 @@ export function JobHub() {
 
                   <div style={detailCardStyle}>
                     <p style={sectionLabelStyle}>Timeline</p>
-                    <JobTimeline events={events} emptyMessage="Timeline events will appear once the worker starts." />
+                    <JobTimeline
+                      events={events}
+                      emptyMessage="Timeline events will appear once the worker starts."
+                    />
                   </div>
                 </div>
               ) : (
-                <p style={bodyStyle}>Launch a smoke task to create your first tracked job.</p>
+                <p style={bodyStyle}>
+                  Run a queue check to create your first tracked job.
+                </p>
               )}
             </section>
           </div>
@@ -395,12 +476,14 @@ export function JobHub() {
                   <p style={sectionLabelStyle}>Recent jobs</p>
                   <h2 style={statusTitleStyle}>{jobs.length}</h2>
                 </div>
-                <span style={pillStyle}>Streaming selected job</span>
+                <span style={pillStyle}>Live updates on</span>
               </div>
 
               <div style={jobListStyle}>
                 {jobs.length === 0 ? (
-                  <p style={bodyStyle}>No jobs have been launched in this workspace yet.</p>
+                  <p style={bodyStyle}>
+                    No jobs have been launched in this workspace yet.
+                  </p>
                 ) : (
                   jobs.map((job) => (
                     <button
@@ -409,15 +492,21 @@ export function JobHub() {
                       onClick={() => void handleSelectJob(job.id)}
                       style={{
                         ...jobRowStyle,
-                        borderColor: selectedJob?.id === job.id ? "rgba(22, 33, 50, 0.34)" : "rgba(73, 98, 128, 0.18)",
+                        borderColor:
+                          selectedJob?.id === job.id
+                            ? "rgba(22, 33, 50, 0.34)"
+                            : "rgba(73, 98, 128, 0.18)",
                       }}
                     >
                       <div style={{ textAlign: "left" }}>
                         <strong>#{job.id}</strong>
                         <div style={metaStyle}>
-                          {job.job_type} | {job.state.replaceAll("_", " ")}
+                          {humanizeLabel(job.job_type)} |{" "}
+                          {humanizeLabel(job.state)}
                         </div>
-                        <div style={subtleMetaStyle}>{job.current_step || "Pending"}</div>
+                        <div style={subtleMetaStyle}>
+                          {job.current_step || "Pending"}
+                        </div>
                       </div>
                       <span style={pillStyle}>{job.progress_percent}%</span>
                     </button>
@@ -432,9 +521,15 @@ export function JobHub() {
   );
 }
 
+function humanizeLabel(value: string): string {
+  return value.replaceAll("_", " ");
+}
+
 function formatApiError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    return error.errors.length > 0 ? `${error.message} ${error.errors.join(" ")}` : error.message;
+    return error.errors.length > 0
+      ? `${error.message} ${error.errors.join(" ")}`
+      : error.message;
   }
   return error instanceof Error ? error.message : fallback;
 }

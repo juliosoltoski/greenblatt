@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -22,15 +28,19 @@ type LoadState = "loading" | "ready" | "error";
 export function ProviderHub() {
   const router = useRouter();
   const [user, setUser] = useState<CurrentUser | null>(null);
-  const [diagnostics, setDiagnostics] = useState<ProviderDiagnosticsResponse | null>(null);
+  const [diagnostics, setDiagnostics] =
+    useState<ProviderDiagnosticsResponse | null>(null);
   const [universes, setUniverses] = useState<UniverseSummary[]>([]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(null);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(
+    null,
+  );
   const [selectedUniverseId, setSelectedUniverseId] = useState<number>(0);
   const [selectedProviderName, setSelectedProviderName] = useState<string>("");
   const [sampleSize, setSampleSize] = useState(100);
   const [refreshCache, setRefreshCache] = useState(false);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
   const [isProbing, setIsProbing] = useState(false);
   const [lastJob, setLastJob] = useState<JobRun | null>(null);
@@ -41,7 +51,10 @@ export function ProviderHub() {
     async function loadInitial() {
       try {
         const currentUser = await getCurrentUser();
-        const workspaceId = currentUser.active_workspace?.id ?? currentUser.workspaces[0]?.id ?? null;
+        const workspaceId =
+          currentUser.active_workspace?.id ??
+          currentUser.workspaces[0]?.id ??
+          null;
         const [providerPayload, universePayload] = await Promise.all([
           getProviderDiagnostics(workspaceId ?? undefined, false),
           listUniverses(workspaceId ?? undefined),
@@ -66,7 +79,11 @@ export function ProviderHub() {
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load provider diagnostics.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load data operations.",
+        );
         setState("error");
       }
     }
@@ -107,7 +124,11 @@ export function ProviderHub() {
         if (!active) {
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to refresh provider diagnostics.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to refresh data-source status.",
+        );
       }
     }
 
@@ -124,11 +145,17 @@ export function ProviderHub() {
     }
     setIsProbing(true);
     setError(null);
+    setNotice(null);
     try {
       const payload = await getProviderDiagnostics(selectedWorkspaceId, true);
       setDiagnostics(payload);
+      setNotice("Live checks refreshed.");
     } catch (probeError) {
-      setError(probeError instanceof Error ? probeError.message : "Unable to run provider probes.");
+      setError(
+        probeError instanceof Error
+          ? probeError.message
+          : "Unable to run live checks.",
+      );
     } finally {
       setIsProbing(false);
     }
@@ -137,11 +164,12 @@ export function ProviderHub() {
   async function handleCacheWarm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectedWorkspaceId == null || selectedUniverseId <= 0) {
-      setError("Select a workspace and universe before launching a cache warm job.");
+      setError("Select a workspace and universe before warming the cache.");
       return;
     }
     setIsLaunching(true);
     setError(null);
+    setNotice(null);
     try {
       const job = await launchProviderCacheWarm({
         workspaceId: selectedWorkspaceId,
@@ -153,8 +181,13 @@ export function ProviderHub() {
       setLastJob(job);
       const payload = await getProviderDiagnostics(selectedWorkspaceId, false);
       setDiagnostics(payload);
+      setNotice("Cache warm job launched.");
     } catch (launchError) {
-      setError(launchError instanceof Error ? launchError.message : "Unable to launch a provider cache warm job.");
+      setError(
+        launchError instanceof Error
+          ? launchError.message
+          : "Unable to launch a cache warm job.",
+      );
     } finally {
       setIsLaunching(false);
     }
@@ -165,8 +198,10 @@ export function ProviderHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Providers</p>
-          <h1 style={titleStyle}>Loading provider diagnostics</h1>
-          <p style={bodyStyle}>Collecting health checks, workspace usage, and recent provider failures.</p>
+          <h1 style={titleStyle}>Loading data coverage and health</h1>
+          <p style={bodyStyle}>
+            Checking data sources, recent issues, and maintenance status.
+          </p>
         </section>
       </main>
     );
@@ -177,8 +212,8 @@ export function ProviderHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Providers</p>
-          <h1 style={titleStyle}>Provider diagnostics unavailable</h1>
-          <p style={bodyStyle}>{error ?? "Unable to load provider diagnostics."}</p>
+          <h1 style={titleStyle}>Data operations unavailable</h1>
+          <p style={bodyStyle}>{error ?? "Unable to load data operations."}</p>
           <Link href="/app" style={primaryLinkStyle}>
             Back to dashboard
           </Link>
@@ -193,15 +228,21 @@ export function ProviderHub() {
         <div style={headerRowStyle}>
           <div>
             <p style={eyebrowStyle}>Providers</p>
-            <h1 style={titleStyle}>Diagnostics and cache operations</h1>
+            <h1 style={titleStyle}>Keep data coverage reliable</h1>
             <p style={bodyStyle}>
-              Use this page to inspect provider health, recent failure pressure, workspace capacity,
-              and cold-start mitigation before running heavier research jobs.
+              Review which data sources are ready for larger research runs,
+              where recent issues are showing up, and which maintenance actions
+              to use before heavier workloads start.
             </p>
           </div>
           <div style={actionRowStyle}>
-            <button type="button" style={secondaryButtonStyle} onClick={() => void handleProbeRefresh()} disabled={isProbing}>
-              {isProbing ? "Probing..." : "Run live probes"}
+            <button
+              type="button"
+              style={secondaryButtonStyle}
+              onClick={() => void handleProbeRefresh()}
+              disabled={isProbing}
+            >
+              {isProbing ? "Checking..." : "Run live checks"}
             </button>
             <Link href="/app/jobs" style={ghostLinkStyle}>
               Open jobs
@@ -210,13 +251,16 @@ export function ProviderHub() {
         </div>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
+        {notice ? <p style={inlineNoticeStyle}>{notice}</p> : null}
 
         <div style={toolbarStyle}>
           <label style={fieldStyle}>
             <span style={labelStyle}>Workspace</span>
             <select
               value={selectedWorkspaceId ?? ""}
-              onChange={(event) => setSelectedWorkspaceId(Number(event.target.value))}
+              onChange={(event) =>
+                setSelectedWorkspaceId(Number(event.target.value))
+              }
               style={inputStyle}
             >
               {user.workspaces.map((workspace) => (
@@ -227,10 +271,27 @@ export function ProviderHub() {
             </select>
           </label>
           <div style={metaClusterStyle}>
-            <SummaryStat label="Active jobs" value={String(diagnostics.workspace_usage.active_jobs.total)} />
-            <SummaryStat label="Provider ops" value={String(diagnostics.workspace_usage.active_jobs.provider_operations)} />
-            <SummaryStat label="Provider failures" value={String(diagnostics.workspace_usage.recent_activity.provider_failures_total)} />
-            <SummaryStat label="Default provider" value={diagnostics.default_provider} />
+            <SummaryStat
+              label="Active jobs"
+              value={String(diagnostics.workspace_usage.active_jobs.total)}
+            />
+            <SummaryStat
+              label="Data jobs"
+              value={String(
+                diagnostics.workspace_usage.active_jobs.provider_operations,
+              )}
+            />
+            <SummaryStat
+              label="Recent issues"
+              value={String(
+                diagnostics.workspace_usage.recent_activity
+                  .provider_failures_total,
+              )}
+            />
+            <SummaryStat
+              label="Primary source"
+              value={diagnostics.default_provider}
+            />
           </div>
         </div>
 
@@ -238,8 +299,14 @@ export function ProviderHub() {
           <section style={cardStyle}>
             <div style={cardHeaderStyle}>
               <div>
-                <p style={sectionLabelStyle}>Provider cards</p>
-                <h2 style={sectionTitleStyle}>{diagnostics.providers.length} configured adapters</h2>
+                <p style={sectionLabelStyle}>Research-facing view</p>
+                <h2 style={sectionTitleStyle}>
+                  {diagnostics.providers.length} configured data sources
+                </h2>
+                <p style={metaStyle}>
+                  Use this overview to spot the safest default source, fallback
+                  coverage, and where a run may need extra caution.
+                </p>
               </div>
             </div>
             <div style={stackStyle}>
@@ -251,24 +318,59 @@ export function ProviderHub() {
                       <p style={metaStyle}>{provider.description}</p>
                     </div>
                     <span style={providerBadgeStyle(provider.state)}>
-                      {provider.configured_default ? "default" : provider.configured_fallback ? "fallback" : provider.state}
+                      {provider.configured_default
+                        ? "primary"
+                        : provider.configured_fallback
+                          ? "fallback"
+                          : humanizeLabel(provider.state)}
                     </span>
                   </div>
                   <div style={detailsGridStyle}>
-                    <DetailItem label="State" value={provider.state} />
-                    <DetailItem label="Cost" value={provider.cost_tier} />
                     <DetailItem
-                      label="Recommended universe"
-                      value={provider.recommended_candidate_limit == null ? "n/a" : `${provider.recommended_candidate_limit} names`}
+                      label="Status"
+                      value={humanizeLabel(provider.state)}
                     />
-                    <DetailItem label="Failures" value={String(provider.recent_failure_count)} />
-                    <DetailItem label="Throttle events" value={String(provider.throttle_events)} />
-                    <DetailItem label="Workflows" value={provider.workflows.length > 0 ? provider.workflows.join(", ") : "none"} />
+                    <DetailItem
+                      label="Cost tier"
+                      value={humanizeLabel(provider.cost_tier)}
+                    />
+                    <DetailItem
+                      label="Best fit size"
+                      value={
+                        provider.recommended_candidate_limit == null
+                          ? "n/a"
+                          : `${provider.recommended_candidate_limit} names`
+                      }
+                    />
+                    <DetailItem
+                      label="Recent issues"
+                      value={String(provider.recent_failure_count)}
+                    />
+                    <DetailItem
+                      label="Throttle events"
+                      value={String(provider.throttle_events)}
+                    />
+                    <DetailItem
+                      label="Used by"
+                      value={
+                        provider.workflows.length > 0
+                          ? provider.workflows.map(humanizeLabel).join(", ")
+                          : "none"
+                      }
+                    />
                   </div>
                   <p style={detailBodyStyle}>{provider.rate_limit_profile}</p>
                   <p style={detailBodyStyle}>{provider.cache_advice}</p>
-                  {provider.detail ? <p style={supportNoteStyle}>Health detail: {provider.detail}</p> : null}
-                  {provider.last_failure_message ? <p style={warningNoteStyle}>Recent failure: {provider.last_failure_message}</p> : null}
+                  {provider.detail ? (
+                    <p style={supportNoteStyle}>
+                      Operator note: {provider.detail}
+                    </p>
+                  ) : null}
+                  {provider.last_failure_message ? (
+                    <p style={warningNoteStyle}>
+                      Recent issue: {provider.last_failure_message}
+                    </p>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -277,15 +379,29 @@ export function ProviderHub() {
           <section style={cardStyle}>
             <div style={cardHeaderStyle}>
               <div>
-                <p style={sectionLabelStyle}>Cache warm</p>
-                <h2 style={sectionTitleStyle}>Prepare a common universe</h2>
+                <p style={sectionLabelStyle}>Operator tools</p>
+                <h2 style={sectionTitleStyle}>
+                  Run live checks and warm shared data
+                </h2>
+                <p style={metaStyle}>
+                  Use these controls only when you need to verify live provider
+                  status or prepare cached data before heavy activity.
+                </p>
               </div>
             </div>
             <form onSubmit={handleCacheWarm} style={formStyle}>
               <label style={fieldStyle}>
                 <span style={labelStyle}>Universe</span>
-                <select value={selectedUniverseId} onChange={(event) => setSelectedUniverseId(Number(event.target.value))} style={inputStyle}>
-                  {universes.length === 0 ? <option value={0}>No universes available</option> : null}
+                <select
+                  value={selectedUniverseId}
+                  onChange={(event) =>
+                    setSelectedUniverseId(Number(event.target.value))
+                  }
+                  style={inputStyle}
+                >
+                  {universes.length === 0 ? (
+                    <option value={0}>No universes available</option>
+                  ) : null}
                   {universes.map((universe) => (
                     <option key={universe.id} value={universe.id}>
                       {universe.name} ({universe.entry_count.toLocaleString()})
@@ -294,8 +410,14 @@ export function ProviderHub() {
                 </select>
               </label>
               <label style={fieldStyle}>
-                <span style={labelStyle}>Provider</span>
-                <select value={selectedProviderName} onChange={(event) => setSelectedProviderName(event.target.value)} style={inputStyle}>
+                <span style={labelStyle}>Data source</span>
+                <select
+                  value={selectedProviderName}
+                  onChange={(event) =>
+                    setSelectedProviderName(event.target.value)
+                  }
+                  style={inputStyle}
+                >
                   {diagnostics.providers.map((provider) => (
                     <option key={provider.key} value={provider.key}>
                       {provider.label}
@@ -311,29 +433,43 @@ export function ProviderHub() {
                   max={500}
                   step={1}
                   value={sampleSize}
-                  onChange={(event) => setSampleSize(Number(event.target.value))}
+                  onChange={(event) =>
+                    setSampleSize(Number(event.target.value))
+                  }
                   style={inputStyle}
                 />
               </label>
               <label style={checkboxStyle}>
-                <input type="checkbox" checked={refreshCache} onChange={(event) => setRefreshCache(event.target.checked)} />
-                <span>Force refresh even if the local cache already contains recent snapshots.</span>
+                <input
+                  type="checkbox"
+                  checked={refreshCache}
+                  onChange={(event) => setRefreshCache(event.target.checked)}
+                />
+                <span>
+                  Refresh existing snapshots instead of reusing recent cached
+                  data.
+                </span>
               </label>
-              <button type="submit" style={primaryButtonStyle} disabled={isLaunching || universes.length === 0}>
-                {isLaunching ? "Launching..." : "Launch cache warm job"}
+              <button
+                type="submit"
+                style={primaryButtonStyle}
+                disabled={isLaunching || universes.length === 0}
+              >
+                {isLaunching ? "Launching..." : "Warm cache"}
               </button>
             </form>
 
             {lastJob ? (
               <div style={inlineNoticeStyle}>
-                <strong>Last launch:</strong> Job #{lastJob.id} is {lastJob.state.replaceAll("_", " ")}.
+                <strong>Last warm-up:</strong> Job #{lastJob.id} is{" "}
+                {humanizeLabel(lastJob.state)}.
               </div>
             ) : null}
 
             <div style={stackStyle}>
-              <p style={sectionLabelStyle}>Recommendations</p>
+              <p style={sectionLabelStyle}>Operator notes</p>
               {diagnostics.recommendations.length === 0 ? (
-                <p style={metaStyle}>No operator recommendations right now.</p>
+                <p style={metaStyle}>No operator notes right now.</p>
               ) : (
                 diagnostics.recommendations.map((item) => (
                   <div key={item} style={recommendationStyle}>
@@ -344,14 +480,19 @@ export function ProviderHub() {
             </div>
 
             <div style={stackStyle}>
-              <p style={sectionLabelStyle}>Recent cache warm jobs</p>
+              <p style={sectionLabelStyle}>Recent warm-up jobs</p>
               {diagnostics.recent_cache_warm_jobs.length === 0 ? (
-                <p style={metaStyle}>No cache warm jobs have been launched in this workspace yet.</p>
+                <p style={metaStyle}>
+                  No cache warm jobs have been launched in this workspace yet.
+                </p>
               ) : (
                 diagnostics.recent_cache_warm_jobs.map((job) => (
                   <Link key={job.id} href="/app/jobs" style={jobLinkStyle}>
                     <strong>#{job.id}</strong>
-                    <span style={metaStyle}>{job.state.replaceAll("_", " ")} · {job.current_step || "Pending"}</span>
+                    <span style={metaStyle}>
+                      {humanizeLabel(job.state)} ·{" "}
+                      {job.current_step || "Pending"}
+                    </span>
                   </Link>
                 ))
               )}
@@ -381,13 +522,22 @@ function DetailItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function providerBadgeStyle(state: ProviderDiagnosticEntry["state"]): CSSProperties {
+function humanizeLabel(value: string): string {
+  return value.replaceAll("_", " ");
+}
+
+function providerBadgeStyle(
+  state: ProviderDiagnosticEntry["state"],
+): CSSProperties {
   const palette = {
     ok: { background: "#e2f3e7", color: "#17663a" },
     warning: { background: "#fff2d9", color: "#8b5c00" },
     error: { background: "#ffe5e0", color: "#8f2622" },
     unconfigured: { background: "#dde6f0", color: "#162132" },
-  } satisfies Record<ProviderDiagnosticEntry["state"], { background: string; color: string }>;
+  } satisfies Record<
+    ProviderDiagnosticEntry["state"],
+    { background: string; color: string }
+  >;
 
   return {
     padding: "0.45rem 0.7rem",

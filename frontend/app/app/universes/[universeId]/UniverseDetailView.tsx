@@ -114,7 +114,7 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Universe Detail</p>
+          <p style={eyebrowStyle}>Universe</p>
           <h1 style={titleStyle}>Loading saved universe</h1>
         </section>
       </main>
@@ -125,8 +125,8 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
     return (
       <main style={pageStyle}>
         <section style={panelStyle}>
-          <p style={eyebrowStyle}>Universe Detail</p>
-          <h1 style={titleStyle}>Universe not available</h1>
+          <p style={eyebrowStyle}>Universe</p>
+          <h1 style={titleStyle}>Universe unavailable</h1>
           <p style={bodyStyle}>{error ?? "Unable to load this universe."}</p>
           <div style={actionRowStyle}>
             <Link href="/app/universes" style={primaryLinkStyle}>
@@ -143,29 +143,28 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
       <section style={panelStyle}>
         <div style={headerRowStyle}>
           <div>
-            <p style={eyebrowStyle}>Universe Detail</p>
+            <p style={eyebrowStyle}>Universe</p>
             <h1 style={titleStyle}>{universe.name}</h1>
           </div>
           <div style={actionRowStyle}>
             <Link href="/app/screens" style={ghostLinkStyle}>
-              Launch screen
+              Run screen
             </Link>
             <Link href="/app/backtests" style={ghostLinkStyle}>
-              Launch backtest
+              Start backtest
             </Link>
             <Link href="/app/universes" style={ghostLinkStyle}>
               All universes
             </Link>
             <Link href="/app" style={ghostLinkStyle}>
-              App shell
+              Dashboard
             </Link>
           </div>
         </div>
 
         <p style={bodyStyle}>
-          Source: <strong>{universe.source_type.replaceAll("_", " ")}</strong>. Workspace:{" "}
-          <strong>{universe.workspace.name}</strong>. Preview and edit the saved metadata before
-          launching screening runs.
+          This saved universe is the starting list for future screens and backtests. Review the
+          notes, tags, and source details here before you reuse it across the workspace.
         </p>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
@@ -182,13 +181,15 @@ export function UniverseDetailView({ universeId }: UniverseDetailViewProps) {
             <p style={metaStyle}>
               {universe.source_upload
                 ? `${universe.source_upload.size_bytes.toLocaleString()} bytes · ${universe.source_upload.storage_backend}`
-                : "No uploaded source file"}
+                : "Created inside the workspace"}
             </p>
           </div>
           <div style={summaryCardStyle}>
             <p style={sectionLabelStyle}>Research status</p>
             <h2 style={summaryTitleStyle}>{universe.is_starred ? "Starred" : "Standard"}</h2>
-            <p style={metaStyle}>{universe.tags.length > 0 ? universe.tags.join(", ") : "No tags yet"}</p>
+            <p style={metaStyle}>
+              {universe.tags.length > 0 ? universe.tags.join(", ") : "Add tags to group related research."}
+            </p>
           </div>
         </div>
 

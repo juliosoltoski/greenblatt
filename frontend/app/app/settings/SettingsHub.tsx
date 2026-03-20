@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  startTransition,
+  useEffect,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -17,8 +23,12 @@ type LoadState = "loading" | "ready" | "error";
 
 export function SettingsHub() {
   const router = useRouter();
-  const [settings, setSettings] = useState<AccountSettingsResponse | null>(null);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(null);
+  const [settings, setSettings] = useState<AccountSettingsResponse | null>(
+    null,
+  );
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(
+    null,
+  );
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -26,6 +36,7 @@ export function SettingsHub() {
   const [workspaceTimezone, setWorkspaceTimezone] = useState("");
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
 
@@ -51,7 +62,11 @@ export function SettingsHub() {
           });
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to load account settings.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load account settings.",
+        );
         setState("error");
       }
     }
@@ -64,7 +79,11 @@ export function SettingsHub() {
   }, [router]);
 
   useEffect(() => {
-    if (selectedWorkspaceId == null || state === "loading" || settings == null) {
+    if (
+      selectedWorkspaceId == null ||
+      state === "loading" ||
+      settings == null
+    ) {
       return;
     }
     if (selectedWorkspaceId === settings.workspace.summary.id) {
@@ -85,7 +104,11 @@ export function SettingsHub() {
         if (!active) {
           return;
         }
-        setError(loadError instanceof Error ? loadError.message : "Unable to reload workspace settings.");
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to reload workspace settings.",
+        );
       }
     }
 
@@ -106,7 +129,9 @@ export function SettingsHub() {
   }
 
   async function refreshSettings(workspaceId?: number) {
-    const payload = await getAccountSettings(workspaceId ?? selectedWorkspaceId ?? undefined);
+    const payload = await getAccountSettings(
+      workspaceId ?? selectedWorkspaceId ?? undefined,
+    );
     applyPayload(payload);
     setSelectedWorkspaceId(payload.workspace.summary.id);
   }
@@ -115,15 +140,23 @@ export function SettingsHub() {
     event.preventDefault();
     setIsSavingProfile(true);
     setError(null);
+    setNotice(null);
     try {
       const updatedUser = await updateCurrentUser({
         firstName,
         lastName,
         email,
       });
-      await refreshSettings(updatedUser.active_workspace?.id ?? selectedWorkspaceId ?? undefined);
+      await refreshSettings(
+        updatedUser.active_workspace?.id ?? selectedWorkspaceId ?? undefined,
+      );
+      setNotice("Profile saved.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save your profile.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save your profile.",
+      );
     } finally {
       setIsSavingProfile(false);
     }
@@ -136,14 +169,20 @@ export function SettingsHub() {
     }
     setIsSavingWorkspace(true);
     setError(null);
+    setNotice(null);
     try {
       await updateWorkspace(settings.workspace.summary.id, {
         name: workspaceName,
         timezone: workspaceTimezone,
       });
       await refreshSettings(settings.workspace.summary.id);
+      setNotice("Workspace settings saved.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save workspace settings.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unable to save workspace settings.",
+      );
     } finally {
       setIsSavingWorkspace(false);
     }
@@ -154,8 +193,10 @@ export function SettingsHub() {
       <main style={pageStyle}>
         <section style={panelStyle}>
           <p style={eyebrowStyle}>Settings</p>
-          <h1 style={titleStyle}>Loading account settings</h1>
-          <p style={bodyStyle}>Collecting profile, workspace, plan, and support data.</p>
+          <h1 style={titleStyle}>Loading account and workspace settings</h1>
+          <p style={bodyStyle}>
+            Bringing in profile, workspace, plan, and support details.
+          </p>
         </section>
       </main>
     );
@@ -182,24 +223,29 @@ export function SettingsHub() {
         <div style={headerRowStyle}>
           <div>
             <p style={eyebrowStyle}>Settings</p>
-            <h1 style={titleStyle}>Account, workspace, and plan readiness</h1>
+            <h1 style={titleStyle}>Manage your account and workspace</h1>
             <p style={bodyStyle}>
-              This page consolidates account profile edits, workspace settings, plan and quota
-              visibility, and the current research-only/commercial-readiness notes.
+              Update profile details, workspace defaults, plan access, and
+              support notes here. Data operations and support-only details stay
+              in dedicated sections so the main settings view remains easier to
+              scan.
             </p>
           </div>
           <Link href="/app/providers" style={ghostLinkStyle}>
-            Provider ops
+            Open data operations
           </Link>
         </div>
 
         {error ? <p style={errorStyle}>{error}</p> : null}
+        {notice ? <p style={infoStyle}>{notice}</p> : null}
 
         <label style={fieldStyle}>
           <span style={labelStyle}>Workspace</span>
           <select
             value={selectedWorkspaceId ?? ""}
-            onChange={(event) => setSelectedWorkspaceId(Number(event.target.value))}
+            onChange={(event) =>
+              setSelectedWorkspaceId(Number(event.target.value))
+            }
             style={inputStyle}
           >
             {settings.user.workspaces.map((workspace) => (
@@ -222,18 +268,37 @@ export function SettingsHub() {
               <div style={fieldGridStyle}>
                 <label style={fieldStyle}>
                   <span style={labelStyle}>First name</span>
-                  <input type="text" value={firstName} onChange={(event) => setFirstName(event.target.value)} style={inputStyle} />
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    style={inputStyle}
+                  />
                 </label>
                 <label style={fieldStyle}>
                   <span style={labelStyle}>Last name</span>
-                  <input type="text" value={lastName} onChange={(event) => setLastName(event.target.value)} style={inputStyle} />
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                    style={inputStyle}
+                  />
                 </label>
               </div>
               <label style={fieldStyle}>
                 <span style={labelStyle}>Email</span>
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} style={inputStyle} />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  style={inputStyle}
+                />
               </label>
-              <button type="submit" style={primaryButtonStyle} disabled={isSavingProfile}>
+              <button
+                type="submit"
+                style={primaryButtonStyle}
+                disabled={isSavingProfile}
+              >
                 {isSavingProfile ? "Saving..." : "Save profile"}
               </button>
             </form>
@@ -243,7 +308,9 @@ export function SettingsHub() {
             <div style={cardHeaderStyle}>
               <div>
                 <p style={sectionLabelStyle}>Workspace</p>
-                <h2 style={sectionTitleStyle}>{settings.workspace.summary.name}</h2>
+                <h2 style={sectionTitleStyle}>
+                  {settings.workspace.summary.name}
+                </h2>
               </div>
               <span style={pillStyle}>{settings.plan.label}</span>
             </div>
@@ -266,7 +333,11 @@ export function SettingsHub() {
                   style={inputStyle}
                 />
               </label>
-              <button type="submit" style={secondaryButtonStyle} disabled={isSavingWorkspace}>
+              <button
+                type="submit"
+                style={secondaryButtonStyle}
+                disabled={isSavingWorkspace}
+              >
                 {isSavingWorkspace ? "Saving..." : "Save workspace"}
               </button>
             </form>
@@ -278,22 +349,53 @@ export function SettingsHub() {
             <div style={cardHeaderStyle}>
               <div>
                 <p style={sectionLabelStyle}>Usage</p>
-                <h2 style={sectionTitleStyle}>Workspace quotas and activity</h2>
+                <h2 style={sectionTitleStyle}>
+                  Workspace activity at a glance
+                </h2>
               </div>
             </div>
             <div style={statsGridStyle}>
-              <StatCard label="Members" value={String(settings.workspace.member_count)} detail="Workspace memberships" />
-              <StatCard label="Active jobs" value={String(settings.workspace.active_jobs.total)} detail={`${settings.workspace.active_jobs.research} research jobs`} />
-              <StatCard label="Universes" value={String(settings.workspace.resource_counts.universes)} detail="Saved research universes" />
-              <StatCard label="Templates" value={String(settings.workspace.resource_counts.templates)} detail="Reusable launch presets" />
-              <StatCard label="Schedules" value={String(settings.workspace.resource_counts.schedules)} detail="Automated strategies" />
-              <StatCard label="Provider failures" value={String(settings.workspace.recent_activity.provider_failures_total)} detail="Historical provider failures" />
+              <StatCard
+                label="Members"
+                value={String(settings.workspace.member_count)}
+                detail="Workspace memberships"
+              />
+              <StatCard
+                label="Active jobs"
+                value={String(settings.workspace.active_jobs.total)}
+                detail={`${settings.workspace.active_jobs.research} research jobs`}
+              />
+              <StatCard
+                label="Universes"
+                value={String(settings.workspace.resource_counts.universes)}
+                detail="Saved research universes"
+              />
+              <StatCard
+                label="Templates"
+                value={String(settings.workspace.resource_counts.templates)}
+                detail="Reusable launch presets"
+              />
+              <StatCard
+                label="Schedules"
+                value={String(settings.workspace.resource_counts.schedules)}
+                detail="Automated strategies"
+              />
+              <StatCard
+                label="Recent data issues"
+                value={String(
+                  settings.workspace.recent_activity.provider_failures_total,
+                )}
+                detail="Recent provider-related failures"
+              />
             </div>
             <div style={calloutStyle}>
-              <strong>Concurrency defaults</strong>
+              <strong>Job limits</strong>
               <p style={metaStyle}>
-                Total jobs: {settings.workspace.limits.total_jobs}. Research jobs: {settings.workspace.limits.research_jobs}. Smoke
-                jobs: {settings.workspace.limits.smoke_jobs}. These limits are visible now, but per-plan enforcement is still groundwork only.
+                Total jobs: {settings.workspace.limits.total_jobs}. Research
+                jobs: {settings.workspace.limits.research_jobs}. Queue checks:{" "}
+                {settings.workspace.limits.smoke_jobs}. These limits show
+                current workspace capacity, even where plan enforcement is still
+                being rolled out.
               </p>
             </div>
           </section>
@@ -301,20 +403,29 @@ export function SettingsHub() {
           <section style={cardStyle}>
             <div style={cardHeaderStyle}>
               <div>
-                <p style={sectionLabelStyle}>Plan</p>
+                <p style={sectionLabelStyle}>Plan and access</p>
                 <h2 style={sectionTitleStyle}>{settings.plan.label}</h2>
               </div>
             </div>
             <p style={bodyStyle}>{settings.plan.description}</p>
             <div style={stackStyle}>
-              <DetailRow label="Seat guidance" value={settings.plan.seat_guidance} />
-              <DetailRow label="Automation guidance" value={settings.plan.automation_guidance} />
-              <DetailRow label="Current plan type" value={settings.plan.workspace_plan_type ?? settings.workspace.summary.plan_type} />
+              <DetailRow label="Seats" value={settings.plan.seat_guidance} />
+              <DetailRow
+                label="Automation"
+                value={settings.plan.automation_guidance}
+              />
+              <DetailRow
+                label="Plan type"
+                value={humanizeLabel(
+                  settings.plan.workspace_plan_type ??
+                    settings.workspace.summary.plan_type,
+                )}
+              />
             </div>
             <div style={tagRowStyle}>
               {settings.plan.feature_flags.map((flag) => (
                 <span key={flag} style={tagStyle}>
-                  {flag}
+                  {humanizeLabel(flag)}
                 </span>
               ))}
             </div>
@@ -324,7 +435,10 @@ export function SettingsHub() {
                   key={plan.key}
                   style={{
                     ...planCardStyle,
-                    borderColor: plan.key === settings.plan.key ? "rgba(22, 33, 50, 0.35)" : "rgba(73, 98, 128, 0.14)",
+                    borderColor:
+                      plan.key === settings.plan.key
+                        ? "rgba(22, 33, 50, 0.35)"
+                        : "rgba(73, 98, 128, 0.14)",
                   }}
                 >
                   <strong>{plan.label}</strong>
@@ -340,29 +454,50 @@ export function SettingsHub() {
           <section style={cardStyle}>
             <div style={cardHeaderStyle}>
               <div>
-                <p style={sectionLabelStyle}>Commercial readiness</p>
-                <h2 style={sectionTitleStyle}>Current product posture</h2>
+                <p style={sectionLabelStyle}>Platform notes</p>
+                <h2 style={sectionTitleStyle}>Billing, access, and support</h2>
               </div>
             </div>
             <div style={stackStyle}>
-              <NoticeBlock title="Research-only positioning" body={settings.notices.research_only} />
-              <NoticeBlock title="Provider usage" body={settings.notices.provider_usage} />
+              <NoticeBlock
+                title="Workspace positioning"
+                body={settings.notices.research_only}
+              />
+              <NoticeBlock
+                title="Data usage guidance"
+                body={settings.notices.provider_usage}
+              />
               <NoticeBlock title="Billing" body={settings.notices.billing} />
             </div>
             <div style={authListStyle}>
               <DetailRow
-                label="Session auth"
-                value={settings.auth_capabilities.session_auth_enabled ? "Enabled" : "Disabled"}
+                label="Session sign-in"
+                value={
+                  settings.auth_capabilities.session_auth_enabled
+                    ? "Enabled"
+                    : "Disabled"
+                }
               />
               <DetailRow
-                label="Social login"
-                value={settings.auth_capabilities.social_login_enabled ? "Enabled" : "Not enabled"}
+                label="Social sign-in"
+                value={
+                  settings.auth_capabilities.social_login_enabled
+                    ? "Enabled"
+                    : "Not enabled"
+                }
               />
               <DetailRow
-                label="Billing"
-                value={settings.auth_capabilities.billing_enabled ? "Enabled" : "Not enabled"}
+                label="Billing access"
+                value={
+                  settings.auth_capabilities.billing_enabled
+                    ? "Enabled"
+                    : "Not enabled"
+                }
               />
-              <DetailRow label="Support contact" value={settings.notices.support_contact} />
+              <DetailRow
+                label="Support contact"
+                value={settings.notices.support_contact}
+              />
             </div>
           </section>
 
@@ -370,25 +505,54 @@ export function SettingsHub() {
             <section style={cardStyle}>
               <div style={cardHeaderStyle}>
                 <div>
-                  <p style={sectionLabelStyle}>Support overview</p>
-                  <h2 style={sectionTitleStyle}>Internal operator snapshot</h2>
+                  <p style={sectionLabelStyle}>Operator and support</p>
+                  <h2 style={sectionTitleStyle}>Support snapshot</h2>
+                  <p style={metaStyle}>
+                    This section is for support and maintenance work. General
+                    workspace settings stay in the cards above.
+                  </p>
                 </div>
                 <a href="http://localhost:8000/admin/" style={ghostLinkStyle}>
-                  Django admin
+                  Open admin console
                 </a>
               </div>
               <div style={statsGridStyle}>
-                <StatCard label="Users" value={String(settings.support_overview.user_count)} detail="All platform users" />
-                <StatCard label="Workspaces" value={String(settings.support_overview.workspace_count)} detail="All workspaces" />
-                <StatCard label="Active jobs" value={String(settings.support_overview.active_job_count)} detail="Queued or running" />
-                <StatCard label="7d failures" value={String(settings.support_overview.failed_job_count_7d)} detail="Recent failed jobs" />
+                <StatCard
+                  label="Users"
+                  value={String(settings.support_overview.user_count)}
+                  detail="All platform users"
+                />
+                <StatCard
+                  label="Workspaces"
+                  value={String(settings.support_overview.workspace_count)}
+                  detail="All workspaces"
+                />
+                <StatCard
+                  label="Active jobs"
+                  value={String(settings.support_overview.active_job_count)}
+                  detail="Queued or running"
+                />
+                <StatCard
+                  label="7d failures"
+                  value={String(settings.support_overview.failed_job_count_7d)}
+                  detail="Recent failed jobs"
+                />
               </div>
               <div style={stackStyle}>
                 {settings.support_overview.recent_failures.map((item) => (
-                  <div key={`${item.job_id}-${item.updated_at}`} style={supportFailureStyle}>
-                    <strong>#{item.job_id} · {item.job_type}</strong>
+                  <div
+                    key={`${item.job_id}-${item.updated_at}`}
+                    style={supportFailureStyle}
+                  >
+                    <strong>
+                      #{item.job_id} · {item.job_type}
+                    </strong>
                     <div style={metaStyle}>{item.workspace_name}</div>
-                    <div style={metaStyle}>{item.error_message ?? item.error_code ?? "Unknown failure"}</div>
+                    <div style={metaStyle}>
+                      {item.error_message ??
+                        item.error_code ??
+                        "Unknown failure"}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -400,7 +564,15 @@ export function SettingsHub() {
   );
 }
 
-function StatCard({ label, value, detail }: { label: string; value: string; detail: string }) {
+function StatCard({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
   return (
     <div style={statCardStyle}>
       <span style={labelStyle}>{label}</span>
@@ -426,6 +598,10 @@ function NoticeBlock({ title, body }: { title: string; body: string }) {
       <p style={metaStyle}>{body}</p>
     </div>
   );
+}
+
+function humanizeLabel(value: string): string {
+  return value.replaceAll("_", " ");
 }
 
 const pageStyle: CSSProperties = {
@@ -679,4 +855,11 @@ const metaStyle: CSSProperties = {
 
 const errorStyle: CSSProperties = {
   color: "#9d1b1b",
+};
+
+const infoStyle: CSSProperties = {
+  color: "#0f4c81",
+  background: "#e6f1ff",
+  padding: "0.9rem 1rem",
+  borderRadius: "16px",
 };
